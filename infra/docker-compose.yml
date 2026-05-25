@@ -26,6 +26,36 @@ services:
       timeout: 5s
       retries: 10
 
+  # Local LLM (optional, controlled by the `ollama` profile).
+  # Start with `pnpm docker:up:ollama` to bring this up alongside db + compiler;
+  # `pnpm docker:up` leaves it dormant so the project stays light for users
+  # who only want the mock / Anthropic / Perplexity providers.
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ollama"]
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "sh", "-c", "ollama list >/dev/null 2>&1 || curl -fsS http://localhost:11434/api/tags >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  # One-shot init job that pulls the default model on first boot. Re-runs are
+  # cheap (Ollama deduplicates), so leaving this in the default profile is fine.
+  ollama-init:
+    image: ollama/ollama:latest
+    profiles: ["ollama"]
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["OLLAMA_HOST=http://ollama:11434 ollama pull ${OLLAMA_MODEL:-qwen2.5:7b-instruct} && echo 'Model ready'"]
+    restart: "no"
+
   compiler:
     build:
       # Build context is the repo root so the Dockerfile can COPY
@@ -65,3 +95,4 @@ services:
 volumes:
   db_data:
   typst_cache:
+  ollama_data:

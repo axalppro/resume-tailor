@@ -1,6 +1,7 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ProviderBadge } from "@/components/provider-badge";
 
 export const metadata: Metadata = {
   title: "Resume Tailor",
@@ -24,8 +25,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
         </header>
         <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
-        <footer className="mx-auto max-w-6xl px-6 pb-10 pt-4 text-xs text-slate-400">
-          Phase 2 · Provider-pluggable AI (mock | Claude Sonnet) · Local-first
+        <footer className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-6 pb-10 pt-4 text-xs text-slate-400">
+          <span>Phase 2 · Hybrid AI (mock | ollama | anthropic | perplexity) · Local-first</span>
+          <ProviderBadge />
         </footer>
       </body>
     </html>

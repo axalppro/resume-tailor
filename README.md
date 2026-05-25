@@ -330,9 +330,15 @@ Architecture validated end-to-end. Mocked AI. One-click sample PDF.
 
 ### Phase 2 — **in this build**
 
-- **Real LLM provider** — Anthropic Claude Sonnet via `@anthropic-ai/sdk`,
-  selected at runtime via `AI_PROVIDER` env (`mock` | `anthropic`).
-  The mock is still the default so the app boots without an API key.
+- **Hybrid LLM provider** — four backends selectable at runtime via
+  `AI_PROVIDER`:
+  - `mock` — deterministic offline mock (default).
+  - `ollama` — local model in Docker (default for shared builds, no
+    signup, no key, fully private).
+  - `anthropic` — real Claude Sonnet via `@anthropic-ai/sdk`.
+  - `perplexity` — Perplexity sonar via OpenAI-compatible API.
+  All four go through the same provider abstraction with Zod-validated
+  JSON output and a single automatic retry on schema failure.
 - **Parse-job UI** — "Parse with AI" button on the job-offer detail page
   renders an extracted `JobSignals` card (required/preferred skills,
   keywords, role themes, suggested emphasis).
@@ -355,14 +361,49 @@ Architecture validated end-to-end. Mocked AI. One-click sample PDF.
 
 ```env
 # apps/web/.env
-AI_PROVIDER=mock                 # or `anthropic`
-ANTHROPIC_API_KEY=sk-ant-...     # required when AI_PROVIDER=anthropic
-AI_MODEL=claude-sonnet-4-5       # default; override if Anthropic ships a newer SKU
+AI_PROVIDER=mock                 # mock | ollama | anthropic | perplexity
+
+# --- anthropic ---
+ANTHROPIC_API_KEY=sk-ant-...
+AI_MODEL=claude-sonnet-4-5
+
+# --- ollama (local Docker) ---
+OLLAMA_URL=http://localhost:11434  # inside compose: http://ollama:11434
+OLLAMA_MODEL=qwen2.5:7b-instruct
+
+# --- perplexity ---
+PERPLEXITY_API_KEY=pplx-...
+PERPLEXITY_MODEL=sonar
 ```
 
+#### Provider matrix
+
+| Provider     | Signup       | Cost          | Quality           | Hardware needed |
+| ------------ | ------------ | ------------- | ----------------- | --------------- |
+| `mock`       | none         | free          | deterministic     | none            |
+| `ollama`     | none         | free          | good (small LLM)  | ~8 GB RAM/VRAM  |
+| `anthropic`  | Anthropic    | pay-per-token | excellent         | none (cloud)    |
+| `perplexity` | Perplexity   | pay-per-token | good–very good   | none (cloud)    |
+
+#### Switching providers
+
+```bash
+# Local model (recommended default for sharing)
+pnpm docker:up:ollama                     # boots db + compiler + ollama + pulls qwen2.5
+# then in apps/web/.env:  AI_PROVIDER=ollama
+
+# Claude
+# in apps/web/.env:  AI_PROVIDER=anthropic  ANTHROPIC_API_KEY=...
+
+# Perplexity
+# in apps/web/.env:  AI_PROVIDER=perplexity  PERPLEXITY_API_KEY=...
+```
+
+The currently-active provider is displayed in the dashboard footer chip
+so you can verify at a glance which backend the app is talking to.
+
 The mock provider returns the same deterministic outputs Phase 1 used, so
-you can develop UI without burning credits. Switch to `anthropic` only
-when you want real outputs.
+you can develop UI without burning credits or waiting on a local model.
 
 ### Phase 2 — pause discipline
 

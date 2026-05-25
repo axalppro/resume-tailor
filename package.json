@@ -13,11 +13,13 @@
     "db:migrate": "pnpm --filter @resume-tailor/web prisma:migrate",
     "db:seed": "pnpm --filter @resume-tailor/web prisma:seed",
     "docker:up": "docker compose -f infra/docker-compose.yml up -d",
-    "docker:down": "docker compose -f infra/docker-compose.yml down",
-    "docker:logs": "docker compose -f infra/docker-compose.yml logs -f",
-    "docker:rebuild": "docker compose -f infra/docker-compose.yml down && docker compose -f infra/docker-compose.yml build --no-cache && docker compose -f infra/docker-compose.yml up -d",
+    "docker:up:ollama": "docker compose -f infra/docker-compose.yml --profile ollama up -d",
+    "docker:down": "docker compose -f infra/docker-compose.yml --profile ollama down",
+    "docker:logs": "docker compose -f infra/docker-compose.yml --profile ollama logs -f",
+    "docker:rebuild": "docker compose -f infra/docker-compose.yml --profile ollama down && docker compose -f infra/docker-compose.yml --profile ollama build --no-cache && docker compose -f infra/docker-compose.yml --profile ollama up -d",
     "docker:rebuild:compiler": "docker compose -f infra/docker-compose.yml stop compiler && docker compose -f infra/docker-compose.yml rm -f compiler && docker compose -f infra/docker-compose.yml build --no-cache compiler && docker compose -f infra/docker-compose.yml up -d compiler",
-    "docker:nuke": "docker compose -f infra/docker-compose.yml down -v --rmi local --remove-orphans"
+    "docker:pull:ollama-model": "docker compose -f infra/docker-compose.yml --profile ollama exec ollama ollama pull ${OLLAMA_MODEL:-qwen2.5:7b-instruct}",
+    "docker:nuke": "docker compose -f infra/docker-compose.yml --profile ollama down -v --rmi local --remove-orphans"
   },
   "engines": {
     "node": ">=20"
