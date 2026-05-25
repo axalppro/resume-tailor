@@ -7,7 +7,9 @@
  * project, tools mentioned) MUST NOT change.
  */
 
-export const REWRITE_BULLETS_VERSION = 1;
+import { DIRECTIVES_SAFETY_ADDENDUM, formatDirectivesBlock } from "./directives";
+
+export const REWRITE_BULLETS_VERSION = 2;
 
 export const REWRITE_BULLETS_SYSTEM = `You rephrase resume bullet points to better fit a target job.
 HARD RULES:
@@ -15,15 +17,26 @@ HARD RULES:
 - You may only adjust phrasing, emphasis, and ordering of words.
 - Keep each bullet under ~28 words, starting with a strong verb.
 - Output JSON: { "rewrites": [{ "targetId": string, "original": string, "suggested": string, "rationale": string }] }
-- No prose outside the JSON.`;
+- No prose outside the JSON.
+
+${DIRECTIVES_SAFETY_ADDENDUM}`;
 
 export const REWRITE_BULLETS_USER = (args: {
   jobSignalsJson: string;
   bulletsJson: string;
-}) => `JOB SIGNALS:
+  bulletsDirective?: string;
+  generalDirective?: string;
+}) => {
+  const directives = formatDirectivesBlock(
+    "bullets",
+    args.bulletsDirective,
+    args.generalDirective,
+  );
+  return `JOB SIGNALS:
 ${args.jobSignalsJson}
 
 BULLETS TO REPHRASE (each item has id + text):
 ${args.bulletsJson}
-
+${directives ? `\n${directives}\n` : ""}
 Return JSON in the exact shape described above.`;
+};

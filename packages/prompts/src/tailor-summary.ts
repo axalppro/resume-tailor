@@ -7,7 +7,9 @@
  * new employers, dates, degrees, certifications, projects, tools, or languages.
  */
 
-export const TAILOR_SUMMARY_VERSION = 1;
+import { DIRECTIVES_SAFETY_ADDENDUM, formatDirectivesBlock } from "./directives";
+
+export const TAILOR_SUMMARY_VERSION = 2;
 
 export const TAILOR_SUMMARY_SYSTEM = `You rewrite a professional summary to align with a target job offer.
 HARD RULES:
@@ -15,13 +17,23 @@ HARD RULES:
 - Output a single JSON object: { "summary": string, "rationale": string }.
 - Keep summary to 2–3 sentences, ~50 words max.
 - Match the offer's tone and emphasis, but stay truthful.
-- No prose outside the JSON, no markdown, no code fences.`;
+- No prose outside the JSON, no markdown, no code fences.
+
+${DIRECTIVES_SAFETY_ADDENDUM}`;
 
 export const TAILOR_SUMMARY_USER = (args: {
   currentSummary: string;
   jobSignalsJson: string;
   candidateFactsJson: string;
-}) => `CURRENT SUMMARY:
+  summaryDirective?: string;
+  generalDirective?: string;
+}) => {
+  const directives = formatDirectivesBlock(
+    "summary",
+    args.summaryDirective,
+    args.generalDirective,
+  );
+  return `CURRENT SUMMARY:
 """
 ${args.currentSummary}
 """
@@ -31,5 +43,6 @@ ${args.jobSignalsJson}
 
 CANDIDATE FACTS (truth pool — do not invent beyond this):
 ${args.candidateFactsJson}
-
+${directives ? `\n${directives}\n` : ""}
 Return JSON: { "summary": "...", "rationale": "..." }`;
+};

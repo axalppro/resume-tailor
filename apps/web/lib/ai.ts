@@ -28,6 +28,7 @@ import {
   type TailorResponse,
   type ContentBlock,
   type BlockRecommendation,
+  type Directives,
   TailorResponseSchema,
 } from "@resume-tailor/shared-types";
 import {
@@ -166,6 +167,7 @@ export async function tailorSummary(args: {
   currentSummary: string;
   signals: JobSignals;
   candidateFacts: unknown;
+  directives?: Directives;
 }): Promise<{ summary: string; rationale: string; trace: LlmTrace }> {
   const call: LlmCall = {
     promptName: "tailor-summary",
@@ -175,6 +177,8 @@ export async function tailorSummary(args: {
       currentSummary: args.currentSummary,
       jobSignalsJson: JSON.stringify(args.signals, null, 2),
       candidateFactsJson: JSON.stringify(args.candidateFacts, null, 2),
+      summaryDirective: args.directives?.summary,
+      generalDirective: args.directives?.general,
     }),
   };
   const { data, trace } = await runValidated(call, SummarySchema);
@@ -195,6 +199,7 @@ const RewritesSchema = z.object({
 export async function rewriteBullets(args: {
   signals: JobSignals;
   bullets: { id: string; text: string }[];
+  directives?: Directives;
 }): Promise<{
   rewrites: { targetId: string; original: string; suggested: string; rationale: string }[];
   trace: LlmTrace;
@@ -222,6 +227,8 @@ export async function rewriteBullets(args: {
     user: REWRITE_BULLETS_USER({
       jobSignalsJson: JSON.stringify(args.signals, null, 2),
       bulletsJson: JSON.stringify(args.bullets, null, 2),
+      bulletsDirective: args.directives?.bullets,
+      generalDirective: args.directives?.general,
     }),
   };
   const { data, trace } = await runValidated(call, RewritesSchema);
@@ -237,6 +244,13 @@ export async function buildTailorResponse(args: {
   blocks: ContentBlock[];
   signals: JobSignals;
   request: TailorRequest;
+  /**
+   * Phase 3: merged tailoring directives (global + per-job, with per-job
+   * overlaying global). Optional — omitted or empty fields produce the same
+   * prompts as Phase 2. Style guidance only; the safety addendum in each
+   * tailor prompt forbids using directives to fabricate facts.
+   */
+  directives?: Directives;
 }): Promise<{ response: TailorResponse; traces: LlmTrace[] }> {
   const traces: LlmTrace[] = [];
 
@@ -252,6 +266,7 @@ export async function buildTailorResponse(args: {
       })),
       languages: args.master.languages.map((l) => l.name),
     },
+    directives: args.directives,
   });
   traces.push(summary.trace);
 
@@ -264,6 +279,7 @@ export async function buildTailorResponse(args: {
   const bullets = await rewriteBullets({
     signals: args.signals,
     bullets: bulletsInput,
+    directives: args.directives,
   });
   traces.push(bullets.trace);
 

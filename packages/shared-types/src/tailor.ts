@@ -12,6 +12,76 @@ export const EditableFieldSchema = z.enum([
 ]);
 export type EditableField = z.infer<typeof EditableFieldSchema>;
 
+/**
+ * Directives — user-authored, free-text style/voice guidance the AI must take
+ * into account when tailoring. Each field maps to a specific tailoring sub-call
+ * (summary / capabilities / bullets) plus a catch-all `general`.
+ *
+ * Directives are style hints only. The AI must NEVER use them as license to
+ * invent employers, dates, projects, certifications, tools or languages that
+ * are not in the master resume — the safety addendum in tailor-resume.md
+ * enforces this.
+ *
+ * Two storage locations:
+ *  - Global, on MasterResumeProfile.directives — applies to every job.
+ *  - Per-job, on JobOffer.directives — overlays / complements the global one.
+ *
+ * Both are merged via `mergeDirectives` before being injected into the prompt.
+ */
+export const DirectivesSchema = z.object({
+  summary: z.string().optional(),
+  capabilities: z.string().optional(),
+  bullets: z.string().optional(),
+  general: z.string().optional(),
+});
+export type Directives = z.infer<typeof DirectivesSchema>;
+
+/**
+ * Merge global + per-job directives. Per-job fields override global ones when
+ * both are non-empty; otherwise the global value is kept. Whitespace-only
+ * strings are treated as empty.
+ */
+export function mergeDirectives(
+  global: Directives | null | undefined,
+  perJob: Directives | null | undefined,
+): Directives {
+  const pick = (a?: string, b?: string): string | undefined => {
+    const bt = (b ?? "").trim();
+    if (bt.length > 0) return b;
+    const at = (a ?? "").trim();
+    if (at.length > 0) return a;
+    return undefined;
+  };
+  return {
+    summary: pick(global?.summary, perJob?.summary),
+    capabilities: pick(global?.capabilities, perJob?.capabilities),
+    bullets: pick(global?.bullets, perJob?.bullets),
+    general: pick(global?.general, perJob?.general),
+  };
+}
+
+/** True if every field is empty / whitespace-only. */
+export function isDirectivesEmpty(d: Directives | null | undefined): boolean {
+  if (!d) return true;
+  return (
+    !(d.summary ?? "").trim() &&
+    !(d.capabilities ?? "").trim() &&
+    !(d.bullets ?? "").trim() &&
+    !(d.general ?? "").trim()
+  );
+}
+
+/**
+ * Safely parse a Json value (from Prisma) into a Directives object. Returns an
+ * empty object if the input is null / not an object / fails validation —
+ * directives are never strictly required.
+ */
+export function parseDirectives(value: unknown): Directives {
+  if (!value || typeof value !== "object") return {};
+  const result = DirectivesSchema.safeParse(value);
+  return result.success ? result.data : {};
+}
+
 export const TailorConstraintsSchema = z.object({
   targetPageCount: z.number().int().min(1).max(3).default(1),
   tone: z.enum(["concise", "neutral", "warm"]).default("concise"),

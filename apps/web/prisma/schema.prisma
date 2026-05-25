@@ -22,6 +22,11 @@ model MasterResumeProfile {
   name      String
   /// Full master resume document (matches MasterResumeSchema in shared-types).
   data      Json
+  /// Global user-authored tailoring directives (Phase 3). Free-text style
+  /// guidance per variable (summary / capabilities / bullets / general) that
+  /// is injected into every tailor prompt. Validated against
+  /// DirectivesSchema in shared-types. NULL when the user has never set any.
+  directives Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -63,6 +68,9 @@ model JobOffer {
   /// Parsed JobSignals (or null if not yet parsed). Validated against
   /// JobSignalsSchema before write.
   signals   Json?
+  /// Per-job tailoring directives (Phase 3) that override / complement the
+  /// global directives on MasterResumeProfile. Same Directives shape.
+  directives Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

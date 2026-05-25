@@ -23,7 +23,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   ApprovedTailoring,
-  BlockRecommendation,
   ContentBlockType,
   JobSignals,
   MasterResume,
@@ -103,6 +102,19 @@ export function TailoringSession({
   const [pdf, setPdf] = useState<{ base64: string; filename: string; pageCount?: number } | null>(
     null,
   );
+
+  // Recommended-mode pipeline progress strip. Each step is shown as a chip
+  // that lights up while running and turns green when it succeeds.
+  type StepKey = "parse" | "tailor" | "approve" | "typst" | "compile";
+  type StepState = "idle" | "running" | "done" | "error";
+  const [recommendedRunning, setRecommendedRunning] = useState(false);
+  const [steps, setSteps] = useState<Record<StepKey, StepState>>({
+    parse: "idle",
+    tailor: "idle",
+    approve: "idle",
+    typst: "idle",
+    compile: "idle",
+  });
 
   // ------------------------------------------------------------- defaults
   const defaultSummary = useMemo(
@@ -330,6 +342,191 @@ export function TailoringSession({
     }
   }
 
+  // ====================================================================
+  // Recommended mode — one-click pipeline.
+  // Reuses the same API routes the manual buttons hit (parse-job, tailor,
+  // generate-typst, compile-pdf, tailoring-sessions PATCH). The only
+  // difference is the approval payload: we auto-build it from the AI's
+  // suggested defaults instead of waiting for the user to click radios.
+  // ====================================================================
+  function autoBuildApproved(
+    tr: TailorResponse,
+    signalsForFallback: JobSignals | null,
+  ): ApprovedTailoring {
+    void signalsForFallback;
+    const blockById = new Map(tr.recommendedBlocks.map((b) => [b.blockId, b]));
+
+    // Auto-select every block the AI marked recommendedDefault.
+    const autoSelectedIds = tr.recommendedBlocks
+      .filter((b) => b.recommendedDefault)
+      .map((b) => b.blockId);
+
+    const selected: ApprovedTailoring["selected"] = {
+      headline: defaultHeadline,
+      profile: master.profile_variants[0]?.id ?? "",
+      capabilities: tr.suggestedCapabilities.map((c) => c.id),
+      experience: master.experience.map((e) => e.id),
+      education: [],
+      projects: [],
+      languages: [],
+      certifications: [],
+      additional_experience: [],
+    };
+
+    for (const id of autoSelectedIds) {
+      const blk = blockById.get(id);
+      if (!blk || !blk.refId) continue;
+      switch (blk.blockType) {
+        case "education":
+          selected.education.push(blk.refId);
+          break;
+        case "project":
+          selected.projects.push(blk.refId);
+          break;
+        case "language":
+          selected.languages.push(blk.refId);
+          break;
+        case "certification":
+          selected.certifications.push(blk.refId);
+          break;
+        case "additional_experience":
+          selected.additional_experience.push(blk.refId);
+          break;
+      }
+    }
+
+    return {
+      selected,
+      approvedSummary: tr.suggestedSummary,
+      approvedCapabilities: tr.suggestedCapabilities.map((c) => ({
+        id: c.id,
+        text: c.text,
+      })),
+      approvedBulletRewrites: tr.bulletRewrites.map((b) => ({
+        targetId: b.targetId,
+        text: b.suggested,
+      })),
+    };
+  }
+
+  function resetSteps() {
+    setSteps({
+      parse: "idle",
+      tailor: "idle",
+      approve: "idle",
+      typst: "idle",
+      compile: "idle",
+    });
+  }
+
+  async function runRecommended() {
+    setRecommendedRunning(true);
+    setError(null);
+    setInfo(null);
+    resetSteps();
+
+    const setStep = (k: StepKey, s: StepState) =>
+      setSteps((prev) => ({ ...prev, [k]: s }));
+
+    try {
+      // ---- Step 1: parse (skip if already parsed) -----------------------
+      setStep("parse", "running");
+      let workingSignals: JobSignals | null = signals;
+      if (!workingSignals) {
+        const r = await fetch("/api/parse-job", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ jobOfferId: jobOffer.id }),
+        });
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.error ?? "Parse failed");
+        workingSignals = j.signals as JobSignals;
+        setSignals(workingSignals);
+      }
+      setStep("parse", "done");
+
+      // ---- Step 2: tailor ----------------------------------------------
+      setStep("tailor", "running");
+      const tRes = await fetch("/api/tailor", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jobOfferId: jobOffer.id, masterResumeId }),
+      });
+      const tJson = await tRes.json();
+      if (!tJson.ok) throw new Error(tJson.error ?? "Tailor failed");
+      const tr = tJson.response as TailorResponse;
+      setTailorResponse(tr);
+      setSessionId(tr.sessionId);
+      setStep("tailor", "done");
+
+      // ---- Step 3: auto-approve AI defaults ----------------------------
+      setStep("approve", "running");
+      const approved = autoBuildApproved(tr, workingSignals);
+      // Mirror the local UI state so the editors reflect what was approved.
+      setApprovedSummary(approved.approvedSummary);
+      setApprovedCapabilities(approved.approvedCapabilities);
+      setApprovedBullets(approved.approvedBulletRewrites);
+      setSelectedBlockIds(
+        tr.recommendedBlocks.filter((b) => b.recommendedDefault).map((b) => b.blockId),
+      );
+      setStep("approve", "done");
+
+      // ---- Step 4: build Typst payload ---------------------------------
+      setStep("typst", "running");
+      const typstRes = await fetch("/api/generate-typst", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ masterResumeId, approved }),
+      });
+      const typstJson = await typstRes.json();
+      if (!typstJson.ok) throw new Error(typstJson.error ?? "Typst gen failed");
+      setStep("typst", "done");
+
+      // ---- Step 5: compile PDF + persist -------------------------------
+      setStep("compile", "running");
+      const pdfRes = await fetch("/api/compile-pdf", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          source: typstJson.source,
+          data: typstJson.data,
+          filename: typstJson.filename,
+          persist: { jobOfferId: jobOffer.id, masterResumeId, sessionId: tr.sessionId },
+        }),
+      });
+      const pdfJson = await pdfRes.json();
+      if (!pdfJson.ok) throw new Error(pdfJson.error ?? "Compile failed");
+      setPdf({
+        base64: pdfJson.pdfBase64,
+        filename: pdfJson.filename,
+        pageCount: pdfJson.pageCount,
+      });
+
+      // Persist approved + mark session rendered.
+      await fetch(`/api/tailoring-sessions/${tr.sessionId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ approved, status: "rendered" }),
+      });
+      setStep("compile", "done");
+
+      setInfo(
+        `Recommended pipeline done — ${pdfJson.bytes} bytes in ${pdfJson.compileMs} ms.`,
+      );
+    } catch (err) {
+      setSteps((prev) => {
+        const next = { ...prev };
+        for (const k of Object.keys(next) as StepKey[]) {
+          if (next[k] === "running") next[k] = "error";
+        }
+        return next;
+      });
+      setError((err as Error).message);
+    } finally {
+      setRecommendedRunning(false);
+    }
+  }
+
   // ---------------------------------------------------------------- derived
   const bulletEditsForReview: SuggestedEdit[] = tailorResponse?.bulletRewrites ?? [];
   const optionalBlocks = (tailorResponse?.recommendedBlocks ?? []).filter((r) =>
@@ -361,6 +558,29 @@ export function TailoringSession({
             {jobOffer.rawText}
           </pre>
         )}
+      </section>
+
+      {/* ============================================ Recommended mode */}
+      <section className="rounded-xl border border-brand/30 bg-brand/5 p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-brand-dark">
+              Recommended mode
+            </h2>
+            <p className="mt-1 text-xs text-slate-600">
+              Runs parse → tailor → auto-approve AI defaults → render in one click.
+              You can still tweak everything below and regenerate manually.
+            </p>
+          </div>
+          <button
+            onClick={runRecommended}
+            disabled={recommendedRunning || generating || parsing || tailoring}
+            className="rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-dark disabled:opacity-50"
+          >
+            {recommendedRunning ? "Running…" : "Tailor & generate (recommended)"}
+          </button>
+        </div>
+        <RecommendedProgress steps={steps} />
       </section>
 
       {/* ============================================ Parse + Signals */}
@@ -517,6 +737,61 @@ function SignalsCard({ signals }: { signals: JobSignals }) {
       <Chips label="Keywords" items={signals.keywords} />
       <Chips label="Role themes" items={signals.roleThemes} />
       <Chips label="Suggested emphasis" items={signals.suggestedEmphasis} />
+    </div>
+  );
+}
+
+// =============================================================================
+// RecommendedProgress — inline progress strip for the recommended-mode
+// pipeline. Always rendered; in "idle" state every step shows as a muted chip.
+// =============================================================================
+function RecommendedProgress({
+  steps,
+}: {
+  steps: Record<
+    "parse" | "tailor" | "approve" | "typst" | "compile",
+    "idle" | "running" | "done" | "error"
+  >;
+}) {
+  const order: Array<{
+    key: "parse" | "tailor" | "approve" | "typst" | "compile";
+    label: string;
+  }> = [
+    { key: "parse", label: "Parse" },
+    { key: "tailor", label: "Tailor" },
+    { key: "approve", label: "Approve defaults" },
+    { key: "typst", label: "Build Typst" },
+    { key: "compile", label: "Compile PDF" },
+  ];
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px]">
+      {order.map((s, i) => {
+        const state = steps[s.key];
+        const palette =
+          state === "done"
+            ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+            : state === "running"
+              ? "bg-amber-100 text-amber-800 border-amber-200 animate-pulse"
+              : state === "error"
+                ? "bg-red-100 text-red-800 border-red-200"
+                : "bg-slate-100 text-slate-500 border-slate-200";
+        return (
+          <span key={s.key} className="flex items-center gap-1.5">
+            <span
+              className={`rounded-full border px-2 py-0.5 ${palette}`}
+              aria-label={`${s.label}: ${state}`}
+            >
+              {state === "done" ? "✓ " : state === "error" ? "✗ " : ""}
+              {s.label}
+            </span>
+            {i < order.length - 1 && (
+              <span className="text-slate-300" aria-hidden>
+                →
+              </span>
+            )}
+          </span>
+        );
+      })}
     </div>
   );
 }

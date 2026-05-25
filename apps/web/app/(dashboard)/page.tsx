@@ -1,4 +1,13 @@
+/**
+ * Dashboard page \u2014 Phase 3.
+ *
+ * The Phase 2 "Recent generated resumes" list is replaced by a job-offer
+ * history view (one row per JobOffer). Each row carries the latest-session
+ * status, PDF count, open/delete actions. Version history per offer still
+ * lives on the job-offer detail page.
+ */
 import { SamplePdfButton } from "@/components/sample-pdf-button";
+import { JobOfferList, type JobOfferRow } from "@/components/job-offer-list";
 import { prisma } from "@/lib/db";
 import Link from "next/link";
 
@@ -9,19 +18,47 @@ export default async function DashboardPage() {
   // still renders during first-time setup.
   let profileCount = 0;
   let blockCount = 0;
-  let recentResumes: { id: string; filename: string; createdAt: Date }[] = [];
+  let totalPdfs = 0;
+  let rows: JobOfferRow[] = [];
   let dbError: string | null = null;
 
   try {
-    [profileCount, blockCount, recentResumes] = await Promise.all([
+    const [pc, bc, pdfs, offers] = await Promise.all([
       prisma.masterResumeProfile.count(),
       prisma.contentBlock.count(),
-      prisma.generatedResume.findMany({
+      prisma.generatedResume.count(),
+      prisma.jobOffer.findMany({
         orderBy: { createdAt: "desc" },
-        take: 5,
-        select: { id: true, filename: true, createdAt: true },
+        take: 50,
+        include: {
+          _count: { select: { generatedResumes: true, tailoringSessions: true } },
+          tailoringSessions: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            select: { id: true, status: true, updatedAt: true },
+          },
+        },
       }),
     ]);
+    profileCount = pc;
+    blockCount = bc;
+    totalPdfs = pdfs;
+    rows = offers.map((o) => ({
+      id: o.id,
+      title: o.title,
+      company: o.company,
+      createdAt: o.createdAt,
+      parsed: o.signals !== null,
+      generatedCount: o._count.generatedResumes,
+      sessionCount: o._count.tailoringSessions,
+      latestSession: o.tailoringSessions[0]
+        ? {
+            id: o.tailoringSessions[0].id,
+            status: o.tailoringSessions[0].status,
+            updatedAt: o.tailoringSessions[0].updatedAt,
+          }
+        : null,
+    }));
   } catch (err) {
     dbError = (err as Error).message;
   }
@@ -33,8 +70,8 @@ export default async function DashboardPage() {
         <p className="mt-2 max-w-2xl text-sm text-slate-600">
           Paste a job offer, let the AI extract its signals, review every
           suggested edit, then generate a one-page PDF. Default provider is the
-          deterministic mock — set <code>AI_PROVIDER=anthropic</code> in{" "}
-          <code>apps/web/.env</code> to use real Claude calls.
+          deterministic mock \u2014 set <code>AI_PROVIDER</code> in{" "}
+          <code>apps/web/.env</code> to switch to anthropic, ollama, or perplexity.
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <Link
@@ -59,33 +96,17 @@ export default async function DashboardPage() {
       <section className="grid gap-4 sm:grid-cols-3">
         <Card label="Master profiles" value={profileCount} />
         <Card label="Content blocks" value={blockCount} />
-        <Card label="Generated resumes" value={recentResumes.length} />
+        <Card label="Generated PDFs" value={totalPdfs} />
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-800">Recent generated resumes</h2>
+          <h2 className="text-lg font-semibold text-slate-800">Job offers</h2>
           <Link href="/jobs/new" className="text-sm text-brand hover:underline">
             + New job offer
           </Link>
         </div>
-        {recentResumes.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-500">
-            Nothing yet. Generate the sample PDF above to confirm the pipeline,
-            then create a job offer from the “New job offer” link.
-          </p>
-        ) : (
-          <ul className="mt-3 divide-y divide-slate-100">
-            {recentResumes.map((r) => (
-              <li key={r.id} className="flex items-center justify-between py-2 text-sm">
-                <Link href={`/resumes/${r.id}`} className="text-brand hover:underline">
-                  {r.filename}
-                </Link>
-                <span className="text-xs text-slate-400">{r.createdAt.toLocaleString()}</span>
-              </li>
-            ))}
-          </ul>
-        )}
+        <JobOfferList initial={rows} />
       </section>
     </div>
   );

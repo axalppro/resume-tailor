@@ -11,6 +11,9 @@ import {
   TailorRequestSchema,
   JobSignalsSchema,
   MasterResumeSchema,
+  parseDirectives,
+  mergeDirectives,
+  isDirectivesEmpty,
 } from "@resume-tailor/shared-types";
 import { prisma } from "@/lib/db";
 import { buildTailorResponse } from "@/lib/ai";
@@ -47,6 +50,13 @@ export async function POST(req: NextRequest) {
   const signals = JobSignalsSchema.parse(offer.signals);
   const master = MasterResumeSchema.parse(profile.data);
 
+  // Phase 3: pull global + per-job directives, merge them, then thread them
+  // through `buildTailorResponse`. `parseDirectives` is safe against null /
+  // legacy rows, so this is a no-op for users who haven't set any.
+  const globalDirectives = parseDirectives(profile.directives);
+  const jobDirectives = parseDirectives(offer.directives);
+  const directives = mergeDirectives(globalDirectives, jobDirectives);
+
   // Pre-create the session so we can stamp its id onto the response.
   const session = await prisma.tailoringSession.create({
     data: {
@@ -67,6 +77,7 @@ export async function POST(req: NextRequest) {
     })),
     signals,
     request: parsed.data,
+    directives: isDirectivesEmpty(directives) ? undefined : directives,
   });
 
   // Persist traces alongside the response under a reserved `_traces` key so we

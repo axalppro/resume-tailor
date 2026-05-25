@@ -6,10 +6,11 @@
  * offer. It then mounts the interactive <TailoringSession/> client component.
  */
 import { notFound } from "next/navigation";
-import { MasterResumeSchema } from "@resume-tailor/shared-types";
+import { MasterResumeSchema, parseDirectives } from "@resume-tailor/shared-types";
 import { prisma } from "@/lib/db";
 import { TailoringSession } from "@/components/tailoring-session";
 import { VersionHistory } from "@/components/version-history";
+import { DirectivesEditor } from "@/components/directives-editor";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -66,6 +67,13 @@ export default async function JobOfferPage({
           + New job offer
         </Link>
       </header>
+
+      <DirectivesEditor
+        endpoint={`/api/job-offers/${offer.id}/directives`}
+        initial={parseDirectives(offer.directives)}
+        title="Per-job tailoring directives"
+        description="Overlay the global directives for this job only. Empty fields fall back to the global value from Settings."
+      />
 
       <TailoringSession
         jobOffer={{
