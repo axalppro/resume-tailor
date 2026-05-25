@@ -41,9 +41,13 @@ export class PerplexityProvider implements LlmProvider {
       model: this.model,
       system: call.system + JSON_GUARDRAIL,
       user: call.user,
-      // Perplexity's API documents `response_format` as supported; harmless
-      // if it's ever dropped because the validator strips fences anyway.
-      jsonMode: true,
+      // NOTE: Perplexity does NOT accept OpenAI's `{ type: "json_object" }`
+      // shape — their API only allows `text`, `json_schema` (which requires
+      // a full schema), or `regex`. Sending json_object yields 400 before
+      // generation starts. We rely on the JSON_GUARDRAIL system prompt plus
+      // the existing Zod-validated retry in ai.ts, which already strips
+      // code fences and re-prompts on validation failure.
+      jsonMode: false,
     });
   }
 }
