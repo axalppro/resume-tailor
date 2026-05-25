@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { BlockRecommendation } from "@resume-tailor/shared-types";
 
 interface Props {
@@ -14,20 +14,53 @@ interface Props {
  * Shows every recommended ContentBlock as a checkbox, grouped by type. AI's
  * `recommendedDefault` only seeds the initial checked state; the user has
  * full control from there.
+ *
+ * --- React safety note ---------------------------------------------------
+ * Previous revision called `onChange` from *inside* the `setChecked` updater,
+ * which React (correctly) flagged with:
+ *
+ *   "Cannot update a component (TailoringSession) while rendering a
+ *    different component (CheckboxSectionPicker)"
+ *
+ * Updater functions are allowed to run during render (strict-mode double
+ * invoke, concurrent rendering, etc.). Triggering a parent setState from
+ * there interleaves two renders. The fix is to mutate local state in the
+ * handler and emit `onChange` from a useEffect that fires after commit —
+ * the same pattern the sibling live-edit components use.
+ *
+ * As a bonus this also fixes a latent bug: the parent never received the
+ * initial set of `recommendedDefault: true` blocks until the user toggled
+ * something. Now the effect runs once on mount and the parent sees the
+ * defaults immediately.
  */
 export function CheckboxSectionPicker({ recommendations, onChange }: Props) {
-  const [checked, setChecked] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(recommendations.map((r) => [r.blockId, r.recommendedDefault])),
+  // Re-seed when the recommendations list changes (e.g. user clicks
+  // "Re-tailor"). Memo + key on blockId list keeps it stable.
+  const initial = useMemo<Record<string, boolean>>(
+    () => Object.fromEntries(recommendations.map((r) => [r.blockId, r.recommendedDefault])),
+    [recommendations],
   );
+  const [checked, setChecked] = useState<Record<string, boolean>>(initial);
+
+  useEffect(() => setChecked(initial), [initial]);
+
+  useEffect(() => {
+    onChange?.(
+      Object.entries(checked)
+        .filter(([, v]) => v)
+        .map(([k]) => k),
+    );
+    // We intentionally omit `onChange` from deps. Parents commonly pass an
+    // inline arrow on every render; including it would create a feedback
+    // loop where every parent re-render bumps the effect → calls onChange
+    // → triggers another parent re-render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checked]);
 
   const groups = groupBy(recommendations, (r) => r.blockType);
 
   function toggle(id: string) {
-    setChecked((c) => {
-      const next = { ...c, [id]: !c[id] };
-      onChange?.(Object.entries(next).filter(([, v]) => v).map(([k]) => k));
-      return next;
-    });
+    setChecked((c) => ({ ...c, [id]: !c[id] }));
   }
 
   return (
