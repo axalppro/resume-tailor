@@ -128,19 +128,26 @@ export function TailoringSession({
 
   // Hydrate from existing approved JSON on first mount (if user previously
   // saved a draft for this job offer).
+  //
+  // CRITICAL: this effect MUST run exactly once per mount. The parent is a
+  // Server Component with force-dynamic, so `initialSession` is a brand-new
+  // object reference on every parent re-render — making `[initialSession]`
+  // as deps would re-fire on every RSC refresh, calling setApprovedX, which
+  // re-renders this component, which propagates fresh `recommendations`/
+  // `suggestions` arrays to CheckboxSectionPicker / CapabilitiesRanked /
+  // DirectivesEditor children whose own `[initial]` resync effects then loop
+  // back into our setState. That cascade was the `Maximum update depth
+  // exceeded` crash that locked out clicks on the textboxes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const a = initialSession?.approved as Partial<ApprovedTailoring> | null;
     if (!a) return;
     if (a.approvedSummary) setApprovedSummary(a.approvedSummary);
     if (a.approvedCapabilities) setApprovedCapabilities(a.approvedCapabilities);
     if (a.approvedBulletRewrites) setApprovedBullets(a.approvedBulletRewrites);
-    if (a.selected) {
-      // Pre-check selected block IDs derived from refIds (best-effort).
-      // Block IDs are stored on TailorResponse.recommendedBlocks; we can't map
-      // perfectly without it, but if it is present we'll let CheckboxSectionPicker
-      // re-seed from its own props anyway.
-    }
-  }, [initialSession]);
+    // a.selected is intentionally not applied here — CheckboxSectionPicker
+    // re-seeds from its own `recommendations` prop. See its safety comment.
+  }, []);
 
   // -------------------------------------------------------- API callbacks
   async function runParse() {

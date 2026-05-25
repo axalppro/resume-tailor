@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { BlockRecommendation } from "@resume-tailor/shared-types";
 
 interface Props {
@@ -34,15 +34,28 @@ interface Props {
  * defaults immediately.
  */
 export function CheckboxSectionPicker({ recommendations, onChange }: Props) {
-  // Re-seed when the recommendations list changes (e.g. user clicks
-  // "Re-tailor"). Memo + key on blockId list keeps it stable.
+  // Re-seed when the recommendations list *content* changes (e.g. user clicks
+  // "Re-tailor"). We key by the joined blockId+default string so that re-using
+  // the same recommendations array under a fresh object reference does NOT
+  // wipe the user's selections — that was a `Maximum update depth exceeded`
+  // trap because the parent (TailoringSession) re-creates the recoBlocks array
+  // on every state change during the recommended-mode pipeline.
   const initial = useMemo<Record<string, boolean>>(
     () => Object.fromEntries(recommendations.map((r) => [r.blockId, r.recommendedDefault])),
     [recommendations],
   );
+  const seedKey = useMemo(
+    () => recommendations.map((r) => `${r.blockId}:${r.recommendedDefault ? 1 : 0}`).join("|"),
+    [recommendations],
+  );
   const [checked, setChecked] = useState<Record<string, boolean>>(initial);
+  const lastSeedKey = useRef(seedKey);
 
-  useEffect(() => setChecked(initial), [initial]);
+  useEffect(() => {
+    if (lastSeedKey.current === seedKey) return;
+    lastSeedKey.current = seedKey;
+    setChecked(initial);
+  }, [seedKey, initial]);
 
   useEffect(() => {
     onChange?.(

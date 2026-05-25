@@ -12,7 +12,7 @@
  * allowed to *rephrase or rank* — not invent. The bullets shown here all came
  * from the master resume's `capability_pool`. The user is the final arbiter.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 export interface CapabilitySuggestion {
   id: string;
@@ -49,10 +49,23 @@ export function CapabilitiesRanked({
       })),
     [suggestions, recommendedMax],
   );
+  // Stable content key — re-seed only when the suggestions actually change,
+  // not on every parent re-render that hands us a fresh array reference.
+  // Same `Maximum update depth exceeded` trap as DirectivesEditor and
+  // CheckboxSectionPicker had: parent (TailoringSession) re-builds its
+  // capability-suggestions array on every state tick.
+  const seedKey = useMemo(
+    () => `${recommendedMax}|${suggestions.map((s) => `${s.id}:${s.text}`).join("|")}`,
+    [suggestions, recommendedMax],
+  );
   const [rows, setRows] = useState<Row[]>(initial);
+  const lastSeedKey = useRef(seedKey);
 
-  // Re-seed when suggestions change (e.g. after re-running tailor).
-  useEffect(() => setRows(initial), [initial]);
+  useEffect(() => {
+    if (lastSeedKey.current === seedKey) return;
+    lastSeedKey.current = seedKey;
+    setRows(initial);
+  }, [seedKey, initial]);
 
   // Emit upward whenever selection or order changes.
   useEffect(() => {
