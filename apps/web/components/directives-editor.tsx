@@ -15,7 +15,7 @@
  * we use the bare form since that's what /api/master-resume/default/directives
  * and /api/job-offers/[jobId]/directives also expose.
  */
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { Directives } from "@resume-tailor/shared-types";
 
 interface Props {
@@ -61,6 +61,13 @@ const FIELDS: Array<{
 ];
 
 export function DirectivesEditor({ endpoint, initial, title, description }: Props) {
+  // Seed local state once at mount from the server-provided `initial` prop.
+  // We deliberately do NOT resync from `initial` later: the parent is a server
+  // component that re-renders on every navigation, so a `useEffect([initial])`
+  // would receive a fresh object reference on each parent re-render even when
+  // the underlying directives are unchanged, fighting the user's edits and —
+  // in combination with Next 15's RSC refresh after a sibling client fetch —
+  // produced a setState-in-effect loop that crashed the page.
   const [values, setValues] = useState<Directives>({
     summary: initial?.summary ?? "",
     capabilities: initial?.capabilities ?? "",
@@ -71,21 +78,11 @@ export function DirectivesEditor({ endpoint, initial, title, description }: Prop
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // If the parent re-fetches and hands us a new `initial`, reflect it locally.
-  // Guarded so user edits are not clobbered mid-typing.
-  useEffect(() => {
-    if (!initial) return;
-    setValues({
-      summary: initial.summary ?? "",
-      capabilities: initial.capabilities ?? "",
-      bullets: initial.bullets ?? "",
-      general: initial.general ?? "",
-    });
-  }, [initial]);
-
   function update(key: keyof Directives, v: string) {
     setValues((prev) => ({ ...prev, [key]: v }));
-    setMessage(null);
+    // Only clear a stale success message if one is showing — avoids an extra
+    // re-render on every keystroke when nothing is queued.
+    setMessage((m) => (m === null ? m : null));
   }
 
   async function save() {
