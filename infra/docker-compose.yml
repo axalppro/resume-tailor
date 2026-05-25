@@ -1,0 +1,67 @@
+# =============================================================================
+# docker-compose — local end-to-end development
+# =============================================================================
+# Recommended Phase 1 workflow: run `db` and `compiler` in Docker, run `web`
+# on the host with `pnpm dev` for fast HMR. The `web` service is provided for
+# completeness (used in CI / fully-containerised demos).
+# =============================================================================
+
+name: resume-tailor
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-resume}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-resume}
+      POSTGRES_DB: ${POSTGRES_DB:-resume_tailor}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-resume} -d ${POSTGRES_DB:-resume_tailor}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  compiler:
+    build:
+      # Build context is the repo root so the Dockerfile can COPY
+      # apps/compiler/* unambiguously.
+      context: ..
+      dockerfile: apps/compiler/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: ${COMPILER_PORT:-8787}
+    ports:
+      - "${COMPILER_PORT:-8787}:8787"
+    volumes:
+      # Persist Typst package cache between restarts so `@preview/neat-cv`
+      # only downloads once.
+      - typst_cache:/tmp/typst-cache
+
+  # Optional — run the web app inside compose. For Phase 1 testing you'll
+  # usually leave this commented out and run `pnpm dev` on the host instead.
+  # web:
+  #   image: node:20-bookworm-slim
+  #   working_dir: /repo
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #     compiler:
+  #       condition: service_started
+  #   environment:
+  #     DATABASE_URL: postgresql://${POSTGRES_USER:-resume}:${POSTGRES_PASSWORD:-resume}@db:5432/${POSTGRES_DB:-resume_tailor}?schema=public
+  #     COMPILER_URL: http://compiler:8787
+  #   command: sh -c "corepack enable && pnpm install && pnpm --filter @resume-tailor/web prisma:migrate && pnpm --filter @resume-tailor/web prisma:seed && pnpm --filter @resume-tailor/web dev -- -H 0.0.0.0"
+  #   volumes:
+  #     - ../:/repo
+  #   ports:
+  #     - "3000:3000"
+
+volumes:
+  db_data:
+  typst_cache:

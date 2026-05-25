@@ -1,0 +1,24 @@
+{
+  "name": "@resume-tailor/shared-types",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./job": "./src/job.ts",
+    "./resume": "./src/resume.ts",
+    "./tailor": "./src/tailor.ts",
+    "./typst": "./src/typst.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

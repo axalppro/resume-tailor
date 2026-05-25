@@ -1,0 +1,29 @@
+Embedded Software Engineer — Connected Devices
+Acme Robotics · Lausanne, Switzerland · Full-time
+
+We are looking for an embedded software engineer to design and ship firmware
+for our next generation of industrial IoT sensors. You will work close to the
+hardware, debug real boards, and own features from schematic to shipped product.
+
+Required skills
+- 2+ years writing firmware in C or C++ on ARM Cortex-M (STM32 or Nordic nRF)
+- Familiarity with BLE, SPI, I2C, CAN, RS232
+- Comfortable with electronics debugging: oscilloscope, logic analyzer, JTAG/SWD
+- Strong understanding of RTOS concepts (FreeRTOS preferred)
+- Git, code review, basic CI
+
+Nice to have
+- Experience with Docker and Linux servers
+- Cloud/IoT data pipelines (InfluxDB, Grafana)
+- Industrial protocols / PLC integration
+- A second language (Python, Go, TypeScript) for tooling
+- Robotics / mechatronics background
+
+You will
+- Bring up new boards and write production firmware
+- Build calibration and test tooling
+- Integrate devices with our cloud stack
+- Collaborate with hardware, mechanical, and product teams
+
+Bonus points if you have led a small project end to end, contributed to
+open-source, or built something cool just for fun.

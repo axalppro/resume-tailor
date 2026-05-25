@@ -1,0 +1,6 @@
+{
+  "name": "@resume-tailor/resume-schema",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./master-resume.schema.json"
+}

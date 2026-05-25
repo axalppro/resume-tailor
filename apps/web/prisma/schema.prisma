@@ -1,0 +1,114 @@
+// =============================================================================
+// Prisma schema — Resume Tailor
+// -----------------------------------------------------------------------------
+// Entities follow the data-model section of the project brief:
+//   MasterResumeProfile, ContentBlock, JobOffer, TailoringSession, GeneratedResume
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// The root profile a master resume belongs to. A single private user (you)
+/// will normally have exactly one MasterResumeProfile, but the schema supports
+/// multiple so you can keep e.g. an "Aviation" and a "Software" master pool.
+model MasterResumeProfile {
+  id        String   @id @default(cuid())
+  name      String
+  /// Full master resume document (matches MasterResumeSchema in shared-types).
+  data      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  blocks            ContentBlock[]
+  tailoringSessions TailoringSession[]
+  generatedResumes  GeneratedResume[]
+
+  @@map("master_resume_profiles")
+}
+
+/// An atomic, selectable item that can appear on a resume.
+model ContentBlock {
+  id              String   @id @default(cuid())
+  profileId       String
+  type            String   // ContentBlockType — see shared-types/resume.ts
+  title           String
+  content         String
+  tags            String[] @default([])
+  defaultPriority Int      @default(50)
+  truthSource     String   @default("master_resume")
+  active          Boolean  @default(true)
+  /// Optional pointer back to the master pool entity (e.g. experience id).
+  refId           String?
+
+  profile MasterResumeProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, type, active])
+  @@index([profileId, refId])
+  @@map("content_blocks")
+}
+
+model JobOffer {
+  id        String   @id @default(cuid())
+  title     String
+  company   String
+  source    String   @default("paste") // paste | upload | url
+  rawText   String
+  url       String?
+  /// Parsed JobSignals (or null if not yet parsed). Validated against
+  /// JobSignalsSchema before write.
+  signals   Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tailoringSessions TailoringSession[]
+  generatedResumes  GeneratedResume[]
+
+  @@map("job_offers")
+}
+
+model TailoringSession {
+  id              String   @id @default(cuid())
+  jobOfferId      String
+  masterResumeId  String
+  status          String   @default("draft") // draft | approved | rendered
+  /// Full TailorResponse: suggestions + recommendations + bullet rewrites.
+  suggestions     Json
+  /// ApprovedTailoring once the user has finalised selections.
+  approved        Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  jobOffer        JobOffer            @relation(fields: [jobOfferId], references: [id], onDelete: Cascade)
+  masterResume    MasterResumeProfile @relation(fields: [masterResumeId], references: [id], onDelete: Cascade)
+  generatedResumes GeneratedResume[]
+
+  @@index([jobOfferId])
+  @@index([masterResumeId])
+  @@map("tailoring_sessions")
+}
+
+model GeneratedResume {
+  id              String   @id @default(cuid())
+  jobOfferId      String
+  masterResumeId  String
+  sessionId       String?
+  filename        String
+  typstSource     String   @db.Text
+  pdfPath         String   // local file path in Phase 1 (data/generated/)
+  pageCount       Int?     // populated by the compile route when known
+  createdAt       DateTime @default(now())
+
+  jobOffer      JobOffer            @relation(fields: [jobOfferId], references: [id], onDelete: Cascade)
+  masterResume  MasterResumeProfile @relation(fields: [masterResumeId], references: [id], onDelete: Cascade)
+  session       TailoringSession?   @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([jobOfferId])
+  @@index([sessionId])
+  @@map("generated_resumes")
+}

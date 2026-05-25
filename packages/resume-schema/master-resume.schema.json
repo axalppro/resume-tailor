@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://resume-tailor.local/schemas/master-resume.schema.json",
+  "title": "MasterResume",
+  "description": "Canonical, source-of-truth master resume database. Final tailored resumes are curated snapshots of this pool.",
+  "type": "object",
+  "required": [
+    "basics",
+    "headline_variants",
+    "profile_variants",
+    "capability_pool",
+    "experience",
+    "education",
+    "projects",
+    "languages"
+  ],
+  "properties": {
+    "basics": {
+      "type": "object",
+      "required": ["first_name", "last_name", "email", "phone", "location"],
+      "properties": {
+        "first_name": { "type": "string" },
+        "last_name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string" },
+        "website": { "type": "string" },
+        "linkedin": { "type": "string" },
+        "location": { "type": "string" }
+      }
+    },
+    "headline_variants": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/idText" }
+    },
+    "profile_variants": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/idText" }
+    },
+    "capability_pool": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "text"],
+        "properties": {
+          "id": { "type": "string" },
+          "text": { "type": "string" },
+          "tags": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "experience": { "type": "array", "items": { "$ref": "#/$defs/timedEntry" } },
+    "education": { "type": "array", "items": { "$ref": "#/$defs/timedEntry" } },
+    "projects": { "type": "array", "items": { "$ref": "#/$defs/timedEntry" } },
+    "languages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "level"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "level": { "type": "string" },
+          "tags": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "certifications": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "issuer": { "type": "string" },
+          "year": { "type": ["integer", "string"] },
+          "tags": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "additional_experience": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/timedEntry" }
+    }
+  },
+  "$defs": {
+    "idText": {
+      "type": "object",
+      "required": ["id", "text"],
+      "properties": {
+        "id": { "type": "string" },
+        "text": { "type": "string" }
+      }
+    },
+    "timedEntry": {
+      "type": "object",
+      "required": ["id", "title", "start_year"],
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "org": { "type": "string" },
+        "institution": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "location": { "type": "string" },
+        "start_year": { "type": ["integer", "string"] },
+        "end_year": { "type": ["integer", "string"] },
+        "keywords": { "type": "array", "items": { "type": "string" } },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "bullets": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

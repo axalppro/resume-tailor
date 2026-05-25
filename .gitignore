@@ -1,0 +1,12 @@
+node_modules
+.next
+.turbo
+dist
+build
+.env
+.env.local
+*.log
+.DS_Store
+data/generated/*
+!data/generated/.gitkeep
+apps/web/prisma/migrations/dev.db*

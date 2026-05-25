@@ -1,0 +1,155 @@
+{
+  "basics": {
+    "first_name": "Aurélien",
+    "last_name": "Rithner",
+    "email": "aurelien.rithner@gmail.com",
+    "phone": "+41 79 841 45 03",
+    "website": "https://alpine-air-photo.com",
+    "linkedin": "aurelien-rithner",
+    "location": "Sion, Switzerland"
+  },
+  "headline_variants": [
+    { "id": "embedded-software", "text": "Embedded Systems / Software Engineer" },
+    { "id": "embedded-fullstack", "text": "Embedded Systems Engineer with Software, IoT, and Prototyping Experience" },
+    { "id": "firmware-product", "text": "Hands-on Firmware and Product Prototyping Engineer" }
+  ],
+  "profile_variants": [
+    {
+      "id": "embedded-hands-on",
+      "text": "Curious and hands-on embedded systems engineer with experience in firmware, prototyping, electronics debugging, and multidisciplinary development. Enjoy working closely with teams to build useful, reliable products and improve them through testing and iteration."
+    }
+  ],
+  "capability_pool": [
+    { "id": "embedded-firmware",    "text": "Embedded firmware and MCU development across C, C++, STM32, Nordic nRF, Microchip PIC, and Arduino platforms.", "tags": ["embedded","firmware","mcu"] },
+    { "id": "software-apps",        "text": "Software application development with Go, C#, Python, Java, Qt, Django, React, TypeScript, and front/back-end APIs.", "tags": ["software","web","desktop"] },
+    { "id": "debugging-testing",    "text": "Hands-on debugging, troubleshooting, electronics repair, calibration tooling, testing, and iterative product improvement.", "tags": ["debugging","testing","electronics"] },
+    { "id": "industrial-iot-data",  "text": "Industrial and IoT systems using Docker, PLC deployment, InfluxDB, Grafana, TCP/IP, CAN, RS232, SPI, I2C, and BLE.", "tags": ["industrial","iot","data"] },
+    { "id": "electronics-pcb",      "text": "Electronics design and prototyping including schematics, PCB design, soldering, hardware testing, and custom embedded boards.", "tags": ["electronics","pcb","prototyping"] },
+    { "id": "5g-systems",           "text": "Private 5G deployment exposure including SIM provisioning and system performance analysis.", "tags": ["5g","networking","systems"] },
+    { "id": "robotics-mechatronics","text": "Robotics, mechatronics, CAD, 3D printing, motor control, sensor integration, and autonomous competition systems.", "tags": ["robotics","mechatronics","hardware"] },
+    { "id": "team-coordination",    "text": "Technical leadership and coordination across multidisciplinary projects, event logistics, partnerships, and contributor teams.", "tags": ["leadership","coordination","projects"] }
+  ],
+  "experience": [
+    {
+      "id": "hes-so-research-assistant",
+      "title": "Research Assistant",
+      "org": "HES-SO Valais",
+      "location": "Sion, Switzerland",
+      "start_year": 2023,
+      "end_year": 2025,
+      "keywords": ["Go","Docker","PLC","React","TypeScript","APIs","Grafana","InfluxDB","C++","Qt","Calibration software","Private 5G","SIM provisioning","Performance analysis"],
+      "tags": ["software","embedded","industrial-iot","5g","research"],
+      "bullets": [
+        "Built calibration tooling and APIs in Go and C++/Qt for industrial PLC deployments.",
+        "Designed and deployed a private 5G station, handling SIM provisioning and performance analysis.",
+        "Implemented monitoring dashboards in Grafana over InfluxDB time-series data."
+      ]
+    },
+    {
+      "id": "studer-repair-technician",
+      "title": "Repair Technician",
+      "org": "Studer Innotec SA",
+      "location": "Sion, Switzerland",
+      "start_year": 2019,
+      "end_year": 2023,
+      "keywords": ["Electronics diagnosis","Inverters","Power equipment","Troubleshooting","Repair"],
+      "tags": ["electronics","repair","debugging","part-time"],
+      "bullets": [
+        "Diagnosed and repaired solar inverters and power electronics through systematic troubleshooting.",
+        "Validated repairs on the bench across multiple product generations."
+      ]
+    }
+  ],
+  "education": [
+    {
+      "id": "hes-so-bsc-industrial-systems",
+      "title": "BSc in Industrial Systems Engineering (Infotronics)",
+      "institution": "HES-SO Valais",
+      "location": "Sion, Switzerland",
+      "start_year": 2020,
+      "end_year": 2023,
+      "keywords": ["Software design","Object-oriented programming","Embedded systems","Mechanics","FPGA design","Mechatronics","STM32","Nordic nRF","BLE","CAN","SPI","I2C","Keil","CubeMX","FreeRTOS"],
+      "tags": ["engineering","embedded","software","bachelor"]
+    },
+    {
+      "id": "eptm-vet-electronics",
+      "title": "Federal VET Diploma & Technical Maturity, Electronics",
+      "institution": "EPTM",
+      "location": "Sion, Switzerland",
+      "start_year": 2015,
+      "end_year": 2019,
+      "keywords": ["Electronics","PCB design","Microchip PIC","C programming","Autonomous robot","Eurobot"],
+      "tags": ["electronics","pcb","robotics","vocational"]
+    }
+  ],
+  "projects": [
+    {
+      "id": "nocctua-technical-lead",
+      "title": "Technical Lead – Nocctua (BSc Business eXperience)",
+      "subtitle": "Connected bracelet project",
+      "location": "",
+      "start_year": 2022,
+      "end_year": 2023,
+      "keywords": ["Technical leadership","Nordic microcontroller","Schematic design","PCB design","Soldering","Firmware development"],
+      "tags": ["embedded","wearable","pcb","leadership"]
+    },
+    {
+      "id": "jet-pack-replica",
+      "title": "Jet Pack Replica",
+      "subtitle": "Portable smoke generator",
+      "location": "",
+      "start_year": 2022,
+      "end_year": 2023,
+      "keywords": ["Mechanical design","Electronic systems","Custom PCB","Firmware","Temperature control","Motor drive"],
+      "tags": ["embedded","hardware","mechanical","pcb"]
+    },
+    {
+      "id": "line-crossing-detection",
+      "title": "Line Crossing Detection System for Vehicle Race",
+      "subtitle": "Real-time computer vision system",
+      "location": "",
+      "start_year": 2023,
+      "end_year": 2023,
+      "keywords": ["Python","OpenCV","Real-time detection","Image processing","Django","AI/ML experimentation"],
+      "tags": ["computer-vision","python","web","ai-ml"]
+    },
+    {
+      "id": "fsx-throttle-quadrant",
+      "title": "Custom Throttle Quadrant for FSX",
+      "subtitle": "Flight simulator hardware interface",
+      "location": "",
+      "start_year": 2017,
+      "end_year": 2017,
+      "keywords": ["Arduino","Potentiometer inputs","RS232","C#","Joystick emulation","Flight simulator"],
+      "tags": ["embedded","aviation","hardware","csharp"]
+    }
+  ],
+  "languages": [
+    { "id": "french",  "name": "French",  "level": "Native",       "tags": ["language"] },
+    { "id": "english", "name": "English", "level": "Fluent",       "tags": ["language"] },
+    { "id": "german", "name": "German", "level": "Intermediate", "tags": ["language"] }
+  ],
+  "certifications": [],
+  "additional_experience": [
+    {
+      "id": "bex-open-house-president",
+      "title": "Committee President, Aerodrome Open House Day",
+      "org": "Bex Airfield",
+      "location": "Bex, Switzerland",
+      "start_year": 2025,
+      "end_year": "Present",
+      "keywords": ["Event planning","Logistics","Partnerships","Communications","On-site execution","Contributor coordination"],
+      "tags": ["leadership","aviation","event-coordination"]
+    },
+    {
+      "id": "gvm-pilot-committee",
+      "title": "Private Pilot License (LAPL) / Flying Club Committee Member",
+      "org": "GVM Chablais / Bex Airfield",
+      "location": "Bex, Switzerland",
+      "start_year": 2020,
+      "end_year": "Present",
+      "keywords": ["Active pilot","Flying club","Committee member since 2024","Aviation"],
+      "tags": ["aviation","flying","committee"]
+    }
+  ]
+}

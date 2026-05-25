@@ -1,0 +1,23 @@
+{
+  "name": "resume-tailor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hybrid AI + manual workflow for tailored resumes, rendered through a Typst microservice.",
+  "scripts": {
+    "dev": "pnpm --filter @resume-tailor/web dev",
+    "dev:compiler": "pnpm --filter @resume-tailor/compiler dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "db:generate": "pnpm --filter @resume-tailor/web prisma:generate",
+    "db:migrate": "pnpm --filter @resume-tailor/web prisma:migrate",
+    "db:seed": "pnpm --filter @resume-tailor/web prisma:seed",
+    "docker:up": "docker compose -f infra/docker-compose.yml up -d",
+    "docker:down": "docker compose -f infra/docker-compose.yml down",
+    "docker:logs": "docker compose -f infra/docker-compose.yml logs -f"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.12.0"
+}
