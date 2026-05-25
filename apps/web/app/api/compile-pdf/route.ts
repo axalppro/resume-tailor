@@ -9,9 +9,24 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { PDFDocument } from "pdf-lib";
 import { compilePdf } from "@/lib/typst";
 import { savePdf } from "@/lib/storage";
 import { prisma } from "@/lib/db";
+
+/**
+ * Count the pages in a PDF buffer. Defensive: if pdf-lib chokes on the bytes
+ * (corrupt PDF, unknown encryption), return undefined and let the UI fall back
+ * to its "unknown length" state instead of failing the whole request.
+ */
+async function countPages(pdfBuf: Buffer): Promise<number | undefined> {
+  try {
+    const doc = await PDFDocument.load(pdfBuf, { ignoreEncryption: true });
+    return doc.getPageCount();
+  } catch {
+    return undefined;
+  }
+}
 
 export const runtime = "nodejs";
 
@@ -48,10 +63,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(result, { status: 502 });
   }
 
+  // Derive page count from the returned PDF — used by the soft "over 1 page"
+  // warning on the preview. We do this even when not persisting so the UI can
+  // show the count immediately.
+  const buf = Buffer.from(result.pdfBase64, "base64");
+  const pageCount = await countPages(buf);
+
   let generatedResumeId: string | undefined;
   let savedPath: string | undefined;
   if (parsed.data.persist) {
-    const buf = Buffer.from(result.pdfBase64, "base64");
     const saved = await savePdf({ filename: parsed.data.filename, bytes: buf });
     savedPath = saved.relativePath;
 
@@ -63,6 +83,7 @@ export async function POST(req: NextRequest) {
         filename: parsed.data.filename,
         typstSource: parsed.data.source,
         pdfPath: saved.path,
+        pageCount: pageCount ?? null,
       },
     });
     generatedResumeId = created.id;
@@ -74,6 +95,7 @@ export async function POST(req: NextRequest) {
     bytes: result.bytes,
     compileMs: result.compileMs,
     pdfBase64: result.pdfBase64,
+    pageCount,
     generatedResumeId,
     savedPath,
   });

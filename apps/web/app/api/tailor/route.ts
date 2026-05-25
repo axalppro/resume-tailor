@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  const response = await buildTailorResponse({
+  const { response, traces } = await buildTailorResponse({
     sessionId: session.id,
     master,
     blocks: blocks.map((b) => ({
@@ -69,10 +69,17 @@ export async function POST(req: NextRequest) {
     request: parsed.data,
   });
 
+  // Persist traces alongside the response under a reserved `_traces` key so we
+  // can debug/inspect later without a schema migration.
+  const suggestionsWithTraces = {
+    ...response,
+    _traces: traces,
+  };
+
   await prisma.tailoringSession.update({
     where: { id: session.id },
-    data: { suggestions: response as unknown as object },
+    data: { suggestions: suggestionsWithTraces as unknown as object },
   });
 
-  return NextResponse.json({ ok: true, response });
+  return NextResponse.json({ ok: true, response, traces });
 }

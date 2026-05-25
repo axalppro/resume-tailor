@@ -1,22 +1,23 @@
 /**
  * ai.ts — AI pipeline orchestrator
  * --------------------------------
- * Implements the six-step pipeline described in the project brief:
+ * Implements the six-step pipeline from the project brief:
  *
  *   1. Input collection
  *   2. Structured extraction (parseJob)
- *   3. Recommendation (recommendBlocks)
- *   4. Controlled rewrite (rewriteSummary, rewriteCapabilities, rewriteBullets)
- *   5. Human approval — happens in the UI, not here
- *   6. Rendering — handled by lib/typst.ts + the compiler microservice
+ *   3. Recommendation (recommendBlocks — deterministic, no LLM)
+ *   4. Controlled rewrite (tailorSummary, rewriteBullets)
+ *   5. Human approval — happens in the UI
+ *   6. Rendering — lib/typst.ts + the compiler microservice
  *
- * PHASE 1: Every LLM call is replaced by a deterministic MOCK. The mocks
- * return data that passes the same Zod schemas the real LLM responses will be
- * validated against in Phase 2, so the rest of the system can be exercised
- * end-to-end today without a provider key.
+ * Phase 2: the provider is selected at runtime via `AI_PROVIDER`:
  *
- * Phase 2 will swap `mockLlmCall` for a real provider call; everything around
- * it (prompts, validation, retries, traceability) stays.
+ *   AI_PROVIDER=mock       (default; offline, deterministic, no key)
+ *   AI_PROVIDER=anthropic  (Claude Sonnet via @anthropic-ai/sdk)
+ *
+ * Validation policy: every LLM response is parsed against its Zod schema.
+ * On failure we retry ONCE with a "fix the JSON" addendum; if the retry also
+ * fails the error surfaces to the route handler.
  */
 
 import {
@@ -36,63 +37,75 @@ import {
   TAILOR_SUMMARY_SYSTEM,
   TAILOR_SUMMARY_USER,
   TAILOR_SUMMARY_VERSION,
-  SUGGEST_SECTIONS_SYSTEM,
-  SUGGEST_SECTIONS_USER,
-  SUGGEST_SECTIONS_VERSION,
   REWRITE_BULLETS_SYSTEM,
   REWRITE_BULLETS_USER,
   REWRITE_BULLETS_VERSION,
 } from "@resume-tailor/prompts";
+import { z, type ZodSchema } from "zod";
 import { validateLlmJson } from "./validation";
 import { scoreBlock, explainScore } from "./scoring";
+import { getProvider } from "./providers";
+import type { LlmCall, LlmTrace } from "./providers";
+
+export type { LlmCall, LlmTrace };
 
 // =============================================================================
-// Provider abstraction — Phase 1 mock only
+// Core: run a prompt and validate the JSON it returns.
 // =============================================================================
-
-export interface LlmCall {
-  promptName: string;
-  promptVersion: number;
-  system: string;
-  user: string;
-}
-
-export interface LlmTrace extends LlmCall {
-  rawOutput: string;
-  ms: number;
-  mocked: boolean;
-}
 
 /**
- * PHASE 1 MOCK — returns a deterministic string that, after JSON.parse +
- * schema validation, matches the contract of each prompt. In Phase 2 this is
- * the single function to swap for an OpenAI / Anthropic / etc. call.
+ * Run an LlmCall and validate its JSON output against `schema`. If validation
+ * fails, retry once with an explicit "fix the JSON" addendum appended to the
+ * user message. After two attempts, throw.
  */
-async function mockLlmCall(call: LlmCall): Promise<string> {
-  switch (call.promptName) {
-    case "parse-job":
-      return JSON.stringify(MOCK_JOB_SIGNALS);
-    case "tailor-summary":
-      return JSON.stringify({
-        summary: MOCK_TAILORED_SUMMARY,
-        rationale:
-          "Emphasises embedded firmware on STM32/Nordic, BLE/SPI/I2C, and IoT/Docker tooling — the offer's top required and preferred signals.",
-      });
-    case "rewrite-bullets":
-      return JSON.stringify({ rewrites: MOCK_BULLET_REWRITES });
-    case "suggest-sections":
-      // Recommendations are computed deterministically from the scoring
-      // function in this mock — see recommendBlocks().
-      return JSON.stringify({ recommendations: [] });
-    default:
-      throw new Error(`Unknown prompt: ${call.promptName}`);
-  }
-}
+async function runValidated<T>(
+  call: LlmCall,
+  schema: ZodSchema<T>,
+): Promise<{ data: T; trace: LlmTrace }> {
+  const provider = getProvider();
+  const isMock = provider.name === "mock";
 
-async function runPrompt(call: LlmCall): Promise<LlmTrace> {
+  // Attempt 1
   const start = Date.now();
-  const rawOutput = await mockLlmCall(call); // PHASE 1 MOCK
-  return { ...call, rawOutput, ms: Date.now() - start, mocked: true };
+  const first = await provider.run(call);
+  let trace: LlmTrace = {
+    ...call,
+    rawOutput: first.rawOutput,
+    ms: Date.now() - start,
+    mocked: isMock,
+    model: provider.model,
+    inputTokens: first.inputTokens,
+    outputTokens: first.outputTokens,
+  };
+  const v1 = validateLlmJson(schema, first.rawOutput);
+  if (v1.ok) return { data: v1.data, trace };
+
+  // Attempt 2 — give the model the previous output + an explicit fix request.
+  const fixCall: LlmCall = {
+    ...call,
+    user:
+      call.user +
+      `\n\nYour previous response did not match the required JSON schema.\n` +
+      `Validation error: ${v1.error}\n` +
+      `Return ONLY the corrected JSON object — no prose, no markdown.`,
+  };
+  const retryStart = Date.now();
+  const second = await provider.run(fixCall);
+  trace = {
+    ...fixCall,
+    rawOutput: second.rawOutput,
+    ms: Date.now() - retryStart,
+    mocked: isMock,
+    model: provider.model,
+    inputTokens: second.inputTokens,
+    outputTokens: second.outputTokens,
+  };
+  const v2 = validateLlmJson(schema, second.rawOutput);
+  if (v2.ok) return { data: v2.data, trace };
+
+  throw new Error(
+    `[${call.promptName}] LLM JSON validation failed after retry: ${v2.error}`,
+  );
 }
 
 // =============================================================================
@@ -108,16 +121,12 @@ export async function parseJob(jobOfferText: string): Promise<{
     system: PARSE_JOB_SYSTEM,
     user: PARSE_JOB_USER(jobOfferText),
   };
-  const trace = await runPrompt(call);
-  const validated = validateLlmJson(JobSignalsSchema, trace.rawOutput);
-  if (!validated.ok) {
-    throw new Error(`parse-job validation failed: ${validated.error}`);
-  }
-  return { signals: validated.data, trace };
+  const { data, trace } = await runValidated(call, JobSignalsSchema);
+  return { signals: data, trace };
 }
 
 // =============================================================================
-// Step 3 — Recommendation (deterministic scoring + optional LLM ranking)
+// Step 3 — Recommendation (deterministic — no LLM call)
 // =============================================================================
 export function recommendBlocks(
   blocks: ContentBlock[],
@@ -129,8 +138,6 @@ export function recommendBlocks(
       const priority = scoreBlock(b, signals);
       return {
         blockId: b.id,
-        // ContentBlock.type is stored as a string in the DB; cast back to the
-        // discriminated-union type from shared-types.
         blockType: b.type as BlockRecommendation["blockType"],
         title: b.title,
         priority,
@@ -144,6 +151,12 @@ export function recommendBlocks(
 // =============================================================================
 // Step 4 — Controlled rewrites
 // =============================================================================
+
+const SummarySchema = z.object({
+  summary: z.string().min(1),
+  rationale: z.string().min(1),
+});
+
 export async function tailorSummary(args: {
   currentSummary: string;
   signals: JobSignals;
@@ -159,10 +172,20 @@ export async function tailorSummary(args: {
       candidateFactsJson: JSON.stringify(args.candidateFacts, null, 2),
     }),
   };
-  const trace = await runPrompt(call);
-  const parsed = JSON.parse(trace.rawOutput) as { summary: string; rationale: string };
-  return { summary: parsed.summary, rationale: parsed.rationale, trace };
+  const { data, trace } = await runValidated(call, SummarySchema);
+  return { summary: data.summary, rationale: data.rationale, trace };
 }
+
+const RewritesSchema = z.object({
+  rewrites: z.array(
+    z.object({
+      targetId: z.string(),
+      original: z.string(),
+      suggested: z.string(),
+      rationale: z.string(),
+    }),
+  ),
+});
 
 export async function rewriteBullets(args: {
   signals: JobSignals;
@@ -171,6 +194,22 @@ export async function rewriteBullets(args: {
   rewrites: { targetId: string; original: string; suggested: string; rationale: string }[];
   trace: LlmTrace;
 }> {
+  if (args.bullets.length === 0) {
+    // Avoid an empty round-trip — synthesize an empty trace.
+    return {
+      rewrites: [],
+      trace: {
+        promptName: "rewrite-bullets",
+        promptVersion: REWRITE_BULLETS_VERSION,
+        system: REWRITE_BULLETS_SYSTEM,
+        user: "",
+        rawOutput: '{"rewrites":[]}',
+        ms: 0,
+        mocked: true,
+        model: "skipped",
+      },
+    };
+  }
   const call: LlmCall = {
     promptName: "rewrite-bullets",
     promptVersion: REWRITE_BULLETS_VERSION,
@@ -180,15 +219,12 @@ export async function rewriteBullets(args: {
       bulletsJson: JSON.stringify(args.bullets, null, 2),
     }),
   };
-  const trace = await runPrompt(call);
-  const parsed = JSON.parse(trace.rawOutput) as {
-    rewrites: { targetId: string; original: string; suggested: string; rationale: string }[];
-  };
-  return { rewrites: parsed.rewrites, trace };
+  const { data, trace } = await runValidated(call, RewritesSchema);
+  return { rewrites: data.rewrites, trace };
 }
 
 // =============================================================================
-// High-level "produce a full TailorResponse" helper used by /api/tailor.
+// High-level "produce a full TailorResponse" — used by /api/tailor.
 // =============================================================================
 export async function buildTailorResponse(args: {
   sessionId: string;
@@ -196,7 +232,9 @@ export async function buildTailorResponse(args: {
   blocks: ContentBlock[];
   signals: JobSignals;
   request: TailorRequest;
-}): Promise<TailorResponse> {
+}): Promise<{ response: TailorResponse; traces: LlmTrace[] }> {
+  const traces: LlmTrace[] = [];
+
   const summary = await tailorSummary({
     currentSummary: args.master.profile_variants[0]?.text ?? "",
     signals: args.signals,
@@ -210,27 +248,32 @@ export async function buildTailorResponse(args: {
       languages: args.master.languages.map((l) => l.name),
     },
   });
+  traces.push(summary.trace);
 
-  const bulletsInput = args.master.experience
-    .flatMap((e) =>
-      (e.bullets ?? []).map((b, i) => ({ id: `${e.id}#${i}`, text: b })),
-    )
-    .slice(0, 5); // controlled rewrite — only top N bullets
+  // Controlled rewrite — only the top 5 most-relevant bullets get touched.
+  const allBullets = args.master.experience.flatMap((e) =>
+    (e.bullets ?? []).map((b, i) => ({ id: `${e.id}#${i}`, text: b })),
+  );
+  const bulletsInput = allBullets.slice(0, 5);
 
   const bullets = await rewriteBullets({
     signals: args.signals,
     bullets: bulletsInput,
   });
+  traces.push(bullets.trace);
 
   const recommendedBlocks = recommendBlocks(args.blocks, args.signals);
 
-  // Suggested capabilities: pick the top-scored capability blocks.
   const capabilityRecs = recommendedBlocks
     .filter((r) => r.blockType === "capability_bullet")
     .slice(0, 6)
     .map((r) => {
       const blk = args.blocks.find((b) => b.id === r.blockId)!;
-      return { id: blk.refId ?? blk.id, text: blk.content, rationale: r.reason };
+      return {
+        id: blk.refId ?? blk.id,
+        text: blk.content,
+        rationale: r.reason,
+      };
     });
 
   const response: TailorResponse = {
@@ -247,47 +290,8 @@ export async function buildTailorResponse(args: {
     })),
   };
 
-  // Re-validate before handing back to the caller.
-  return TailorResponseSchema.parse(response);
+  return {
+    response: TailorResponseSchema.parse(response),
+    traces,
+  };
 }
-
-// =============================================================================
-// PHASE 1 mock data — kept at the bottom so it's obvious what's fake.
-// =============================================================================
-
-const MOCK_JOB_SIGNALS: JobSignals = {
-  keywords: ["STM32", "Nordic nRF", "BLE", "SPI", "I2C", "CAN", "FreeRTOS", "Docker", "InfluxDB", "Grafana"],
-  requiredSkills: ["C", "C++", "ARM Cortex-M", "BLE", "SPI", "I2C", "RTOS", "Git"],
-  preferredSkills: ["Docker", "InfluxDB", "Grafana", "Python", "Go", "TypeScript", "Robotics"],
-  roleThemes: ["embedded firmware", "industrial IoT", "calibration tooling", "team collaboration"],
-  suggestedEmphasis: [
-    "Hands-on firmware experience on STM32 / Nordic nRF",
-    "Industrial IoT and cloud data pipelines",
-    "Calibration tooling and bench debugging",
-    "Project leadership end-to-end",
-  ],
-};
-
-const MOCK_TAILORED_SUMMARY =
-  "Hands-on embedded systems engineer with firmware experience on STM32 and Nordic nRF platforms, BLE/SPI/I2C bring-up, and industrial IoT integrations using Docker, InfluxDB, and Grafana. Comfortable owning features from bench debugging to deployed product.";
-
-const MOCK_BULLET_REWRITES = [
-  {
-    targetId: "hes-so-research-assistant#0",
-    original:
-      "Built calibration tooling and APIs in Go and C++/Qt for industrial PLC deployments.",
-    suggested:
-      "Designed calibration tooling and APIs in Go and C++/Qt to support industrial PLC deployments and bench-level validation.",
-    rationale:
-      "Lead with 'Designed' to mirror the offer's 'design and ship firmware' framing; keep all underlying tools and scope unchanged.",
-  },
-  {
-    targetId: "hes-so-research-assistant#1",
-    original:
-      "Designed and deployed a private 5G station, handling SIM provisioning and performance analysis.",
-    suggested:
-      "Brought up and deployed a private 5G station end-to-end, including SIM provisioning and performance analysis.",
-    rationale:
-      "Echoes 'bring up new boards' language from the JD without inventing any new responsibility.",
-  },
-];

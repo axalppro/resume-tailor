@@ -3,10 +3,11 @@
 A private, local-first web app that turns a master resume database into
 tailored, one-page PDFs through a tightly-controlled AI + manual workflow.
 
-> **Status: Phase 1 (MVP) — architecture wired end-to-end, AI calls mocked.**
-> Build, run, click **Generate sample PDF**, and confirm a real PDF comes
-> back. Phase 2 (real AI + manual selection UI) and Phase 3 (auth, polish,
-> deployment) are explicitly **not built yet**.
+> **Status: Phase 2 — functional upload → tailored PDF.**
+> Phase 1 (mocked AI, end-to-end pipeline) and Phase 2 (real Anthropic
+> provider + tailoring UI) are now built. Phase 3 (auth, polish,
+> deployment) is explicitly **not built yet**.
+> Default `AI_PROVIDER=mock` keeps the app runnable without an API key.
 
 ---
 
@@ -327,12 +328,47 @@ See `apps/web/prisma/schema.prisma`. Entities:
 
 Architecture validated end-to-end. Mocked AI. One-click sample PDF.
 
-### Phase 2 — **not started**
+### Phase 2 — **in this build**
 
-- Real LLM provider behind the existing `mockLlmCall` seam.
-- Parse → suggest → review → checkbox → compile UI flow.
-- Persist `JobSignals` and `TailoringSession.suggestions`.
-- Save tailoring history per offer.
+- **Real LLM provider** — Anthropic Claude Sonnet via `@anthropic-ai/sdk`,
+  selected at runtime via `AI_PROVIDER` env (`mock` | `anthropic`).
+  The mock is still the default so the app boots without an API key.
+- **Parse-job UI** — "Parse with AI" button on the job-offer detail page
+  renders an extracted `JobSignals` card (required/preferred skills,
+  keywords, role themes, suggested emphasis).
+- **Tailoring session UI** — single sectioned page with summary review,
+  ranked capability bullets (checkboxes + ↑/↓ reorder), bullet rewrites
+  with original/AI/custom radios, and a manual-only checkbox picker for
+  education / projects / languages / certifications / additional.
+- **Save draft + Generate PDF** — explicit footer buttons (no autosave).
+  Save draft persists `ApprovedTailoring` onto the existing
+  `TailoringSession.approved` JSON column. Generate PDF runs the full
+  Typst pipeline, persists a `GeneratedResume` row, and surfaces the PDF
+  in an inline preview.
+- **Page-count soft warning** — `/api/compile-pdf` now parses the
+  resulting PDF with `pdf-lib` and stores `GeneratedResume.pageCount`.
+  When > 1 the preview shows a yellow advisory; we never reject the PDF.
+- **Version history** — the job-offer detail page lists every
+  `GeneratedResume` for that offer with timestamps.
+
+### Phase 2 — provider env vars
+
+```env
+# apps/web/.env
+AI_PROVIDER=mock                 # or `anthropic`
+ANTHROPIC_API_KEY=sk-ant-...     # required when AI_PROVIDER=anthropic
+AI_MODEL=claude-sonnet-4-5       # default; override if Anthropic ships a newer SKU
+```
+
+The mock provider returns the same deterministic outputs Phase 1 used, so
+you can develop UI without burning credits. Switch to `anthropic` only
+when you want real outputs.
+
+### Phase 2 — pause discipline
+
+Phase 2 is intentionally feature-complete but unproven against real
+Anthropic calls until you test it yourself. **Do not start Phase 3 until
+you have manually exercised the parse → tailor → review → generate flow.**
 
 ### Phase 3 — **future**
 
