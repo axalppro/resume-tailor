@@ -10,9 +10,9 @@ export default function NewJobOfferPage() {
       <div>
         <h1 className="text-2xl font-semibold text-brand-dark">New job offer</h1>
         <p className="mt-2 text-sm text-slate-600">
-          Paste a job description or upload a <code>.txt</code> file. Phase 1
-          just persists it; Phase 2 will trigger the AI parse + tailoring flow
-          from the job-offer detail page.
+          Paste a job description or upload a <code>.txt</code> or{" "}
+          <code>.md</code> file. Saving redirects you to the tailoring session
+          page where you can run "Parse with AI" then "Tailor with AI".
         </p>
       </div>
       <JobOfferUpload onCreated={(id) => router.push(`/jobs/${id}`)} />

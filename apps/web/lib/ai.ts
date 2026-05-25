@@ -140,6 +140,11 @@ export function recommendBlocks(
         blockId: b.id,
         blockType: b.type as BlockRecommendation["blockType"],
         title: b.title,
+        // CRITICAL: forward refId so the UI can pass the master-entity id
+        // into ApprovedTailoring.selected.* arrays. Without this, the Typst
+        // renderer's `get-by-id` calls return empty and the section bodies
+        // disappear even when the headers are shown.
+        refId: b.refId,
         priority,
         reason: explainScore(b, signals),
         recommendedDefault: priority >= 70,
