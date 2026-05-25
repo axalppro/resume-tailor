@@ -57,6 +57,16 @@ export const BlockRecommendationSchema = z.object({
   blockId: z.string(),
   blockType: ContentBlockTypeSchema,
   title: z.string(),
+  /**
+   * `refId` — the id of the underlying master-resume entity this block points
+   * to (e.g. `project.id`, `education.id`, `language.id`). Required by the
+   * Typst renderer's `get-by-id` lookups; without it the section header
+   * renders but its body is empty.
+   *
+   * Optional in the type to stay backwards-compatible with older sessions,
+   * but the recommend pipeline always sets it for manual-only block types.
+   */
+  refId: z.string().optional(),
   priority: z.number().int().min(0).max(100),
   reason: z.string(),
   recommendedDefault: z.boolean(),

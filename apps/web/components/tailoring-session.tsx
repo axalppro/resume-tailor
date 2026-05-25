@@ -180,38 +180,15 @@ export function TailoringSession({
   }
 
   const buildApproved = useCallback((): ApprovedTailoring => {
-    // Map selected block IDs back to refIds, grouped by block type.
+    // Map selected block IDs back to the BlockRecommendation entry so we can
+    // read its `refId` — which is the id of the underlying master-resume
+    // entity (project.id / education.id / language.id / …). The Typst
+    // renderer resolves all section bodies by id, so passing anything other
+    // than refId produces a header with no rows underneath (the Phase 2
+    // "section appears but is empty" bug).
     const blockById = new Map(
       (tailorResponse?.recommendedBlocks ?? []).map((b) => [b.blockId, b]),
     );
-
-    // We don't have refId on BlockRecommendation; we need to look it up in
-    // the master via title fallback. Easier: ContentBlock.refId arrived
-    // alongside the block list — but BlockRecommendation strips it. We pre-
-    // built `recommendedBlocks` from blocks where refId was set; so re-derive
-    // by best-effort name matching against master.
-    const refIdFor = (block: BlockRecommendation): string => {
-      // Many block IDs ARE the refId already in the seed; if not, fall back
-      // to using the block.title to look up the matching item in master.
-      switch (block.blockType) {
-        case "education":
-          return master.education.find((e) => e.title === block.title)?.id ?? block.blockId;
-        case "project":
-          return master.projects.find((p) => p.title === block.title)?.id ?? block.blockId;
-        case "language":
-          return master.languages.find((l) => l.name === block.title)?.id ?? block.blockId;
-        case "certification":
-          return master.certifications.find((c) => c.title === block.title)?.id ?? block.blockId;
-        case "additional_experience":
-          return (
-            master.additional_experience.find((a) => a.title === block.title)?.id ?? block.blockId
-          );
-        case "experience_entry":
-          return master.experience.find((e) => e.title === block.title)?.id ?? block.blockId;
-        default:
-          return block.blockId;
-      }
-    };
 
     const selected: ApprovedTailoring["selected"] = {
       headline: defaultHeadline,
@@ -228,22 +205,32 @@ export function TailoringSession({
     for (const id of selectedBlockIds) {
       const blk = blockById.get(id);
       if (!blk) continue;
-      const refId = refIdFor(blk);
+      if (!blk.refId) {
+        // Older sessions (pre-fix) may lack refId on persisted recommendations.
+        // We can't safely guess; skip with a console warning so it's visible
+        // during testing.
+        // eslint-disable-next-line no-console
+        console.warn(
+          `Block ${blk.blockId} (${blk.blockType} — ${blk.title}) has no refId; ` +
+            `skipping. Re-run "Tailor with AI" to regenerate recommendations.`,
+        );
+        continue;
+      }
       switch (blk.blockType) {
         case "education":
-          selected.education.push(refId);
+          selected.education.push(blk.refId);
           break;
         case "project":
-          selected.projects.push(refId);
+          selected.projects.push(blk.refId);
           break;
         case "language":
-          selected.languages.push(refId);
+          selected.languages.push(blk.refId);
           break;
         case "certification":
-          selected.certifications.push(refId);
+          selected.certifications.push(blk.refId);
           break;
         case "additional_experience":
-          selected.additional_experience.push(refId);
+          selected.additional_experience.push(blk.refId);
           break;
       }
     }

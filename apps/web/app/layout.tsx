@@ -25,7 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </header>
         <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
         <footer className="mx-auto max-w-6xl px-6 pb-10 pt-4 text-xs text-slate-400">
-          Phase 1 · Mocked AI · Local-first
+          Phase 2 · Provider-pluggable AI (mock | Claude Sonnet) · Local-first
         </footer>
       </body>
     </html>

@@ -29,15 +29,24 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-8">
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-semibold text-brand-dark">Phase 1 — smoke test</h1>
+        <h1 className="text-2xl font-semibold text-brand-dark">Resume Tailor</h1>
         <p className="mt-2 max-w-2xl text-sm text-slate-600">
-          This button runs the full pipeline against the seeded master resume:
-          fetch from Postgres → load the Typst template → POST to the compiler
-          microservice → render the returned PDF inline. No AI is involved in
-          this path — it just proves the architecture is wired end-to-end.
+          Paste a job offer, let the AI extract its signals, review every
+          suggested edit, then generate a one-page PDF. Default provider is the
+          deterministic mock — set <code>AI_PROVIDER=anthropic</code> in{" "}
+          <code>apps/web/.env</code> to use real Claude calls.
         </p>
-        <div className="mt-4">
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <Link
+            href="/jobs/new"
+            className="rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-dark"
+          >
+            + New job offer
+          </Link>
           <SamplePdfButton />
+          <span className="text-xs text-slate-500">
+            (sample PDF still works as an end-to-end pipeline smoke test)
+          </span>
         </div>
         {dbError && (
           <p className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
