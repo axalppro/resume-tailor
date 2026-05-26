@@ -60,6 +60,9 @@ export function ExperienceTagsEditor({
   );
 
   // Content-key re-seed guard — same pattern used across the picker family.
+  // CRITICAL: `experiences` and `suggestions` are fresh array references on
+  // every parent render (they come from a `.map()` in TailoringSession). We
+  // MUST NOT depend on the array reference directly — hash to a string key.
   const seedKey = useMemo(
     () =>
       experiences
@@ -82,14 +85,25 @@ export function ExperienceTagsEditor({
   }, [seedKey, initial]);
 
   // Emit upward.
+  // CRITICAL: parent passes `experiences` as a fresh array on every render,
+  // so depending on it directly retriggers this effect every render → calls
+  // onChange → parent setState → re-render → infinite loop. We hash the
+  // experience IDs into a stable string key, hold the latest array in a ref,
+  // and only fire when csvById OR the ID list actually changes.
+  const expIdsKey = useMemo(() => experiences.map((e) => e.id).join("|"), [
+    experiences,
+  ]);
+  const expRef = useRef(experiences);
+  expRef.current = experiences;
+
   useEffect(() => {
-    const rows = experiences.map((e) => ({
+    const rows = expRef.current.map((e) => ({
       experienceId: e.id,
       tags: parseChips(csvById[e.id] ?? ""),
     }));
     onChange?.(rows);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [csvById, experiences]);
+  }, [csvById, expIdsKey]);
 
   if (experiences.length === 0) {
     return (

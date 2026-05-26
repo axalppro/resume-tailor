@@ -127,7 +127,7 @@
               - #b.text
             ]
             #if role-tags.len() > 0 [
-              #emph[Tech: #role-tags.join(" · ")]
+              #emph[#role-tags.join(" · ")]
             ]
           ]
         } else {

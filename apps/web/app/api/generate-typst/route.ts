@@ -43,9 +43,9 @@ export async function POST(req: NextRequest) {
   const master = MasterResumeSchema.parse(profile.data);
   const source = await loadBaseTemplate();
 
-  // Phase 3.5: forward the approved bullet rewrites + keyword sub-lines into
-  // the Typst payload so the renderer can show per-bullet skill chips. Only
-  // bullets the user explicitly kept (included=true) are rendered.
+  // Phase 3.6: forward approved bullets + per-role keyword line into the
+  // Typst payload. Only bullets with included=true are rendered;
+  // approvedExperienceTags carries the per-role Tech sub-line.
   const payload = {
     master,
     selected: {
@@ -53,6 +53,7 @@ export async function POST(req: NextRequest) {
       approvedSummary: parsed.data.approved.approvedSummary,
       approvedCapabilities: parsed.data.approved.approvedCapabilities,
       approvedBulletRewrites: parsed.data.approved.approvedBulletRewrites,
+      approvedExperienceTags: parsed.data.approved.approvedExperienceTags,
     },
   };
 
