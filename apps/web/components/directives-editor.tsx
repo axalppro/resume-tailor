@@ -143,7 +143,7 @@ export function DirectivesEditor({ endpoint, initial, title, description }: Prop
         ))}
       </div>
 
-      <div className="mt-3 flex items-center gap-3">
+      <div className="mt-3 flex items-center gap-3 justify-end">
         <button
           onClick={save}
           disabled={saving}

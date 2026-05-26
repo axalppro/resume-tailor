@@ -146,13 +146,7 @@ export function SkillsRanked({
             className={`flex items-start gap-2 rounded-md border p-2 text-sm shadow-sm ${
               r.checked ? "border-brand/40 bg-brand/5" : "border-slate-200 bg-white"
             }`}
-          >
-            <input
-              type="checkbox"
-              checked={r.checked}
-              onChange={() => toggle(r.id)}
-              className="mt-1.5"
-            />
+          >            
             <div className="flex-1 space-y-1">
               <input
                 type="text"
@@ -194,6 +188,12 @@ export function SkillsRanked({
                 ↓
               </button>
             </div>
+            <input
+              type="checkbox"
+              checked={r.checked}
+              onChange={() => toggle(r.id)}
+              className="mt-1.5"
+            />
           </li>
         ))}
         {rows.length === 0 && (
