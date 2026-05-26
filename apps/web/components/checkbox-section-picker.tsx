@@ -89,12 +89,7 @@ export function CheckboxSectionPicker({ recommendations, onChange }: Props) {
                 key={r.blockId}
                 className="flex items-start gap-3 rounded-md border border-slate-200 bg-white p-3 shadow-sm"
               >
-                <input
-                  type="checkbox"
-                  checked={!!checked[r.blockId]}
-                  onChange={() => toggle(r.blockId)}
-                  className="mt-1"
-                />
+                
                 <div className="flex-1">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-slate-800">{r.title}</span>
@@ -102,6 +97,12 @@ export function CheckboxSectionPicker({ recommendations, onChange }: Props) {
                   </div>
                   <p className="text-xs text-slate-500">{r.reason}</p>
                 </div>
+                <input
+                  type="checkbox"
+                  checked={!!checked[r.blockId]}
+                  onChange={() => toggle(r.blockId)}
+                  className="mt-1"
+                />
               </li>
             ))}
           </ul>

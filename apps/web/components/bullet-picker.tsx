@@ -138,15 +138,6 @@ export function BulletPicker({ edits, experiences, onChange }: Props) {
                   }`}
                 >
                   <div className="flex items-start gap-3">
-                    <input
-                      type="checkbox"
-                      checked={included}
-                      onChange={() =>
-                        setDecision(e.targetId, { included: !included })
-                      }
-                      className="mt-1"
-                      aria-label="Include this bullet"
-                    />
                     <div className="flex-1">
                       <div className="text-[10px] font-mono text-slate-400">
                         {e.targetId}
@@ -164,6 +155,15 @@ export function BulletPicker({ edits, experiences, onChange }: Props) {
                         </div>
                       )}
                     </div>
+                    <input
+                      type="checkbox"
+                      checked={included}
+                      onChange={() =>
+                        setDecision(e.targetId, { included: !included })
+                      }
+                      className="mt-1"
+                      aria-label="Include this bullet"
+                    />
                   </div>
                 </div>
               );

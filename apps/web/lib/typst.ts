@@ -10,38 +10,36 @@ import {
   type CompileResponse,
   type MasterResume,
   type SelectedResume,
+  type TemplateId,
 } from "@resume-tailor/shared-types";
 
 const COMPILER_URL = process.env.COMPILER_URL ?? "http://localhost:8787";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-/**
- * Read the bundled base template. The compiler container ships with its own
- * copy of `/templates`, so on the wire we only need to send the entrypoint
- * source. The partials referenced via `#import "./partials/..."` resolve
- * inside the container against its bundled copy.
- */
+function templatePath(filename: string) {
+  return join(__dirname, "..", "..", "compiler", "src", "templates", filename);
+}
+
 export async function loadBaseTemplate(): Promise<string> {
-  const path = join(
-    __dirname,
-    "..",
-    "..",
-    "compiler",
-    "src",
-    "templates",
-    "base-resume.typ",
-  );
-  return readFile(path, "utf8");
+  return readFile(templatePath("base-resume.typ"), "utf8");
+}
+
+export async function loadBrilliantCvTemplate(): Promise<string> {
+  return readFile(templatePath("brilliant-cv.typ"), "utf8");
+}
+
+export async function loadTemplate(id: TemplateId): Promise<string> {
+  switch (id) {
+    case "brilliant-cv":
+      return loadBrilliantCvTemplate();
+    default:
+      return loadBaseTemplate();
+  }
 }
 
 export interface RenderPayload {
   master: MasterResume;
-  /**
-   * Selected IDs + optional approved AI rewrites. The template prefers
-   * `approvedSummary` / `approvedCapabilities` over master-lookup-by-id when
-   * present.
-   */
   selected: SelectedResume & {
     approvedSummary?: string;
     approvedCapabilities?: { id: string; text: string }[];
@@ -52,6 +50,7 @@ export async function compilePdf(args: {
   source: string;
   data: RenderPayload;
   filename?: string;
+  template?: TemplateId;
 }): Promise<CompileResponse> {
   const res = await fetch(`${COMPILER_URL}/compile`, {
     method: "POST",
@@ -60,16 +59,14 @@ export async function compilePdf(args: {
       source: args.source,
       data: args.data,
       filename: args.filename ?? "resume.pdf",
+      template: args.template ?? "neat-cv",
     }),
   });
 
   const json = await res.json();
   const parsed = CompileResponseSchema.safeParse(json);
   if (!parsed.success) {
-    return {
-      ok: false,
-      error: `Invalid compiler response: ${parsed.error.message}`,
-    };
+    return { ok: false, error: `Invalid compiler response: ${parsed.error.message}` };
   }
   return parsed.data;
 }
