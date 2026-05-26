@@ -49,7 +49,7 @@
   // If approvedCapabilities is non-empty, render those texts directly.
   // Otherwise, fall back to looking up ids in master.capability_pool.
   if "approvedCapabilities" in selected and selected.approvedCapabilities.len() > 0 [
-    = Capabilities
+    = Skills
     #for cap in selected.approvedCapabilities [
       - #cap.text
     ]

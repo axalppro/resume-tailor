@@ -18,7 +18,7 @@
 
 #let render-capabilities(master, ids) = {
   if ids.len() > 0 [
-    = Capabilities
+    = Skills
     #for id in ids {
       let cap = get-by-id(master.capability_pool, id)
       if cap != none [
