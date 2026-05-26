@@ -8,7 +8,7 @@
 #   4. runtime   : minimal node + typst image running the deployed bundle
 # =============================================================================
 
-ARG TYPST_VERSION=0.13.1
+ARG TYPST_VERSION=0.14.0
 ARG NODE_VERSION=20.18.0
 
 # -----------------------------------------------------------------------------
