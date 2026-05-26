@@ -1,425 +1,238 @@
 # Resume Tailor
 
-A private, local-first web app that turns a master resume database into
-tailored, one-page PDFs through a tightly-controlled AI + manual workflow.
+A private, local-first resume tailoring app that combines structured AI assistance with explicit human approval, then renders the result to PDF through a Typst compiler microservice. The app is built as a pnpm monorepo with a Next.js web app, a Fastify-based compiler service, shared Zod types, versioned prompts, and a seeded master-resume content pool. [cite:3][cite:1][cite:10][cite:95]
 
-> **Status: Phase 2 — functional upload → tailored PDF.**
-> Phase 1 (mocked AI, end-to-end pipeline) and Phase 2 (real Anthropic
-> provider + tailoring UI) are now built. Phase 3 (auth, polish,
-> deployment) is explicitly **not built yet**.
-> Default `AI_PROVIDER=mock` keeps the app runnable without an API key.
+> **Status: Phase 3.7 — Phase 2 is complete, Phase 3 is in active delivery.** The current app supports job-offer ingestion, AI parsing, AI-assisted tailoring, a full review UI, save-draft, PDF generation, page-count detection, version history, and ongoing template work including `brilliant-cv` integration. The default `AI_PROVIDER=mock` still keeps the app runnable without an API key, while Ollama, Anthropic, and Perplexity are available through the provider abstraction. [cite:3][cite:76][cite:78]
 
 ---
 
 ## Table of contents
 
-1. [Stack decision (why this, not that)](#stack-decision)
-2. [Repo layout](#repo-layout)
-3. [Local setup](#local-setup)
-4. [Phase 1 test instructions](#phase-1-test-instructions)
-5. [AI architecture explanation](#ai-architecture)
-6. [Data model](#data-model)
-7. [API surface](#api-surface)
-8. [Three-phase roadmap](#roadmap)
+1. [Current state](#current-state)
+2. [Stack](#stack)
+3. [Repo layout](#repo-layout)
+4. [Local setup](#local-setup)
+5. [Workflow](#workflow)
+6. [API surface](#api-surface)
+7. [Data model](#data-model)
+8. [Roadmap](#roadmap)
+9. [Notes on templates](#notes-on-templates)
 
 ---
 
-<a id="stack-decision"></a>
-## 1. Stack decision
+<a id="current-state"></a>
+## 1. Current state
+
+Resume Tailor is no longer at the old “Phase 2 — functional upload → tailored PDF” milestone. Recent work in this Space moved the app beyond that baseline by shipping the end-to-end tailoring flow, stabilising the review UI, simplifying the approved experience-tag model, and starting multi-template support with `brilliant-cv`. [cite:3][cite:80][cite:83]
+
+### What is live now
+
+- Upload or paste a job offer, parse it into structured `JobSignals`, and persist the offer. [cite:3]
+- Run tailoring against a seeded master resume using the provider abstraction (`mock`, `ollama`, `anthropic`, `perplexity`). [cite:3]
+- Review AI output in a single-page tailoring session UI: summary, tailored skills, bullet rewrites, per-role keyword lines, and manual-only optional sections. [cite:3][cite:82][cite:83]
+- Save a draft, generate a PDF, store the rendered resume, and show a page-count soft warning when the document exceeds one page. [cite:3]
+- View version history for generated resumes tied to a job offer. [cite:3]
+- Ongoing Phase 3.7 work: template selection in the UI and a second Typst template adapter for `brilliant-cv`. [cite:76][cite:78][web:15][web:18]
+
+### What changed recently in this Space
+
+The most important product-level change before template work was the move away from per-bullet keyword lists to a cleaner per-role keyword line rendered below the bullets, with a clean break in the approved payload shape rather than backward compatibility code. The same thread also stabilised the tailoring UI after several “maximum update depth exceeded” issues caused by child effects depending on freshly-created array props. [cite:80][cite:83]
+
+---
+
+<a id="stack"></a>
+## 2. Stack
 
 | Layer | Choice | Why |
 |---|---|---|
-| Frontend & API | **Next.js 15 App Router + React 19 + TypeScript** | Single full-stack app, route handlers act as the BFF, Vercel-ready, and lines up with your existing comfort with React + TypeScript. |
-| Database | **PostgreSQL** (Docker locally, Neon-style managed later) | Mature, JSON columns hold the master resume + AI suggestions verbatim, free-tier hosts are plentiful. |
-| ORM | **Prisma** | Type-safe migrations, plays well with Next.js, generated client is the easiest way to consume Postgres from TS. |
-| Validation | **Zod** | Shared types from `packages/shared-types` double as runtime validators for both API inputs and LLM JSON outputs. |
-| Compiler microservice | **TypeScript (Fastify) + Typst CLI in Docker** | See the note below — Go was the live alternative and was deliberately rejected. |
-| Package manager | **pnpm workspaces** | Cheap, fast, monorepo-native. |
+| Frontend & API | **Next.js 15 App Router + React 19 + TypeScript** | Single full-stack app with server routes, a React review UI, and a deployment path that stays Vercel-friendly. [cite:3][cite:84] |
+| Database | **PostgreSQL** | Stores the master resume, content blocks, job offers, tailoring sessions, and generated resumes. [cite:3] |
+| ORM | **Prisma** | Handles schema, migrations, and generated client access from the web app. [cite:3] |
+| Validation | **Zod** | Shared runtime validation for API bodies, prompt outputs, and compiler request/response contracts. [cite:3][cite:10] |
+| Compiler microservice | **Fastify + Typst CLI in Docker** | Keeps PDF compilation isolated and stateless while reusing the same TS toolchain as the web app. [cite:3][cite:9] |
+| Package manager | **pnpm workspaces** | The repo is a single pnpm workspace spanning `apps/*` and `packages/*`. [cite:1][cite:95] |
 
-### Why the compiler stays in TypeScript instead of Go
+### Why the compiler stays in TypeScript
 
-The compiler service is intentionally tiny: receive `{ source, data }`,
-write two files to a temp directory, spawn `typst compile`, read the PDF,
-return it, then `rm -rf` the temp dir. The hot path is process-spawn +
-disk I/O; the network handler does effectively no CPU work.
-
-Concrete reasons to stay in TypeScript:
-
-- **One language, one toolchain.** `pnpm`, `tsx`, `tsc`, the workspace
-  graph, and the shared `@resume-tailor/shared-types` package all already
-  exist for the web app. Adding Go means a second build system, a second
-  CI pipeline, a second image base, and duplicated request/response types
-  in `types.go`.
-- **Shared types are free.** The compiler and the web app already speak
-  the exact same Zod-validated `CompileRequest` / `CompileResponse`
-  shapes from `packages/shared-types`. Go would require manual mirroring.
-- **No measurable Go win for this workload.** The bottleneck is the
-  Typst binary itself (process startup ≈ 50–150 ms plus document compile
-  time). Fastify on Node handles thousands of req/s already; we will be
-  bound by Typst, not the HTTP layer.
-- **Operational simplicity.** One image base (`node:20-bookworm-slim`),
-  one health-check pattern, one log format.
-
-Go would be the better choice if the service grew CPU-bound responsibilities
-(parsing PDFs, image processing, batch fan-out). It does not, so we keep
-it boring. Swap is straightforward if Phase 3 changes the math.
+The compiler service is intentionally tiny: receive `{ source, data }`, write the entrypoint and JSON sidecar into a temp directory, run `typst compile`, return the PDF, and delete the temp directory. That makes the bottleneck the Typst binary itself rather than the HTTP layer, so keeping the compiler in TypeScript avoids a second language, second build pipeline, and duplicated request schemas without giving up meaningful runtime performance. [cite:3][cite:7][cite:9]
 
 ---
 
 <a id="repo-layout"></a>
-## 2. Repo layout
+## 3. Repo layout
 
-```
+```text
 resume-tailor/
 ├─ apps/
-│  ├─ web/               Next.js app (UI + API route handlers)
-│  └─ compiler/          Fastify + Typst CLI HTTP service (Dockerised)
+│  ├─ web/               Next.js app (dashboard UI + API route handlers)
+│  └─ compiler/          Fastify + Typst CLI HTTP service
 ├─ packages/
-│  ├─ shared-types/      Zod schemas + TypeScript types shared everywhere
-│  ├─ resume-schema/     master-resume.schema.json (JSON Schema)
+│  ├─ shared-types/      Shared Zod schemas and TypeScript types
+│  ├─ resume-schema/     JSON Schema for the canonical master resume shape
 │  └─ prompts/           Versioned LLM prompt files
 ├─ infra/
-│  ├─ docker-compose.yml db + compiler (+ optional web)
+│  ├─ docker-compose.yml Local db / compiler / optional ollama stack
 │  └─ deployment-notes.md
 ├─ data/
-│  ├─ seed/              master-resume.json, sample-job-offer.txt
-│  └─ generated/         compiled PDFs land here in Phase 1
+│  ├─ seed/              Seed resume and sample job-offer data
+│  └─ generated/         Locally generated PDFs
 ├─ .env.example
+├─ package.json
 ├─ pnpm-workspace.yaml
 └─ README.md
 ```
 
+The root workspace is defined by `pnpm-workspace.yaml` with `apps/*` and `packages/*`, and the root scripts delegate development, build, lint, typecheck, database, and Docker operations to the appropriate workspace packages. [cite:1][cite:95]
+
 ---
 
 <a id="local-setup"></a>
-## 3. Local setup
+## 4. Local setup
 
 ### Prerequisites
 
-- Node.js ≥ 20
-- pnpm ≥ 9 (`corepack enable && corepack prepare pnpm@9.12.0 --activate`)
-- Docker Desktop / OrbStack
+- Node.js >= 20. [cite:1]
+- pnpm 9.x, activated through Corepack. [cite:1]
+- Docker Desktop or OrbStack for Postgres, the compiler service, and optional Ollama. [cite:3]
 
-### Steps
+### Setup
 
 ```bash
-# 1. Install workspace deps
-cd resume-tailor
+# 1. Install workspace dependencies
 pnpm install
 
 # 2. Configure env
 cp .env.example .env
 cp apps/web/.env.example apps/web/.env
 
-# 3. Bring up Postgres + the compiler container
+# 3. Start local services
 pnpm docker:up
-# (first run builds the compiler image — takes ~2 minutes, mostly the Typst
-# binary download and Typst package cache warm-up)
 
-# 4. Run migrations and seed the master resume
+# 4. Apply DB migrations and seed the master resume
 pnpm db:migrate
 pnpm db:seed
 
-# 5. Start Next.js
+# 5. Start the web app
 pnpm dev
-# → http://localhost:3000
+# http://localhost:3000
 ```
 
 ### Useful scripts
 
-| Script | What |
+| Script | What it does |
 |---|---|
-| `pnpm dev` | Next.js dev server (web) |
-| `pnpm dev:compiler` | Compiler service on the host (skip Docker) |
-| `pnpm docker:up` / `:down` / `:logs` | Manage `db` + `compiler` containers |
-| `pnpm db:migrate` | Apply Prisma migrations |
-| `pnpm db:seed` | Reload Aurélien's master resume + content blocks |
-| `pnpm db:reset` | Drop and recreate the DB |
-| `pnpm build` / `lint` / `typecheck` | All workspaces |
+| `pnpm dev` | Starts the Next.js web app. [cite:1] |
+| `pnpm dev:compiler` | Starts the compiler service on the host. [cite:1] |
+| `pnpm docker:up` / `docker:down` / `docker:logs` | Manages local containers. [cite:1] |
+| `pnpm docker:up:ollama` | Starts db + compiler + Ollama profile. [cite:1] |
+| `pnpm docker:rebuild:compiler` | Rebuilds only the compiler image, useful after Typst/template changes. [cite:1] |
+| `pnpm db:migrate` / `db:seed` | Updates and reseeds the DB. [cite:1] |
+| `pnpm build` / `lint` / `typecheck` | Runs checks across all workspaces. [cite:1] |
 
 ---
 
-<a id="phase-1-test-instructions"></a>
-## 4. Phase 1 test instructions
+<a id="workflow"></a>
+## 5. Workflow
 
-Phase 1 ships with **one acceptance test**: the "Generate sample PDF" button
-on the dashboard must produce a real PDF.
+The product flow is now a six-step pipeline with explicit contracts between each step. The route handlers collect the job-offer text and master resume, parse the offer into structured signals, compute recommendations, generate controlled rewrites for editable fields, let the user approve or reject everything in the tailoring UI, then render a Typst payload and compile it to PDF through the compiler microservice. [cite:3]
 
-1. With `pnpm docker:up` and `pnpm dev` running, open
-   <http://localhost:3000>.
-2. Click **Generate sample PDF**.
-3. Expected: an embedded PDF preview appears within ~1–3 seconds,
-   showing the seeded resume. **Download** writes the PDF locally.
-4. Additionally verify the full chain via curl:
+### Tailoring flow in practice
 
-   ```bash
-   curl -X POST http://localhost:3000/api/sample-pdf | jq '.ok, .bytes, .compileMs'
-   ```
+1. Create or upload a job offer. [cite:3]
+2. Parse the offer into `JobSignals` (`keywords`, `requiredSkills`, `preferredSkills`, `roleThemes`, `suggestedEmphasis`). [cite:3]
+3. Tailor the resume with the selected AI provider. [cite:3]
+4. Review the summary, tailored skills, bullet rewrites, and per-role keyword lines in the single-page session UI. [cite:82][cite:83]
+5. Save the approved tailoring as a draft or generate a PDF immediately. [cite:3]
+6. Persist the generated resume and show it in preview/history. [cite:3]
 
-   You should see `true`, a non-zero byte count, and a compile time in ms.
+### Current approval model
 
-If anything fails, the most common causes are:
-
-- **Compiler container still warming the Typst package cache** — the first
-  compile downloads `@preview/neat-cv`. Wait ~10 s and retry.
-- **DB not migrated** — visit the dashboard; the page surfaces the exact
-  Prisma error inline.
-- **`COMPILER_URL` not set** — defaults to `http://localhost:8787`. Make
-  sure compose's `compiler` service is up: `docker compose -f infra/docker-compose.yml ps`.
-
-### What Phase 1 explicitly does NOT do
-
-- **No real LLM calls.** Every AI route returns deterministic mocked data
-  that passes the same Zod schemas the real provider's response will be
-  validated against. The mocks are clearly tagged `// PHASE 1 MOCK` in
-  `apps/web/lib/ai.ts`.
-- **No length verification.** As requested: PDFs are rendered, previewed,
-  and visually checked by you. A soft warning appears only if downstream
-  code populates `pageCount > 1`.
-- **No auth.** Local-first private app.
-- **No job-offer parsing UI.** The data-entry page works; the tailoring
-  session UI is a Phase-2 placeholder.
-
-> **Pause point.** Build and test Phase 1, then stop. Do not start Phase 2
-> until you ask explicitly.
-
----
-
-<a id="ai-architecture"></a>
-## 5. AI architecture
-
-The AI layer is structured as **six explicit steps**, with strict
-contracts between them. Phase 1 wires every step end-to-end but uses a
-deterministic mock for the actual model call (`mockLlmCall` in
-`apps/web/lib/ai.ts`); Phase 2 will replace that one function with a real
-provider call.
-
-### Step 1 — Input collection
-
-The route handler gathers:
-
-- raw job-offer text
-- the seeded `MasterResume` (DB row + exploded `ContentBlock` rows)
-- the whitelist of editable fields (`summary`, `capabilities`, `experience_bullet`)
-- user constraints (`targetPageCount`, `tone`, `language`)
-
-### Step 2 — Structured extraction (`parseJob`)
-
-Prompt file: `packages/prompts/src/parse-job.ts` (versioned).
-LLM is told to return JSON matching this exact shape:
-
-```ts
-{
-  keywords: string[],
-  requiredSkills: string[],
-  preferredSkills: string[],
-  roleThemes: string[],
-  suggestedEmphasis: string[]
-}
-```
-
-After the model responds:
-
-1. `tryParseJson` strips any stray markdown fences and `JSON.parse` the body.
-2. Zod's `JobSignalsSchema.safeParse` validates the shape.
-3. If validation fails, the result carries a typed `ValidationResult`
-   error so the route handler can retry or surface it cleanly.
-
-### Step 3 — Recommendation (`recommendBlocks`)
-
-Each `ContentBlock` is scored against the signals via
-`apps/web/lib/scoring.ts`:
-
-- Tokens are normalised (lowercased, punctuation-stripped).
-- Base score = `block.defaultPriority` (0–100).
-- Bonus = keyword hits + extra weight for required-skill matches.
-- Cap = 100.
-
-Output is a list of `BlockRecommendation` objects (id, type, title, priority,
-reason, `recommendedDefault`). The UI consumes these as checkboxes.
-
-This step is **deterministic** in Phase 1 — pure local logic, no model call.
-Phase 2 will optionally ask the LLM to re-rank or refine the reasons.
-
-### Step 4 — Controlled rewrites
-
-Only three field types can be rewritten by the model. The whitelist is
-enforced by `EditableFieldSchema` in `packages/shared-types/src/tailor.ts`:
-
-- `summary` (one field) — via `tailorSummary`
-- `capabilities` (a few items at a time, chosen from the master pool) —
-  the model never invents capability text; it ranks pre-existing ones.
-- `experience_bullet` (≤ 5 bullets per call) — via `rewriteBullets`
-
-Each prompt's system message includes hard rules: "never change employer,
-dates, projects, tools, languages". The schema validates the shape, and
-because the data type is JSON we can compare `original` ↔ `suggested`
-deterministically before display.
-
-### Step 5 — Human approval
-
-Suggestions are presented in the UI (`AIEditReview`,
-`CheckboxSectionPicker`). Nothing is auto-applied. The user must:
-
-- Pick the original, the AI suggestion, or write a custom rewrite for
-  each editable field.
-- Check the boxes for which content blocks to include.
-
-Result: an `ApprovedTailoring` document (see `packages/shared-types/src/tailor.ts`).
-
-### Step 6 — Rendering
-
-`POST /api/generate-typst` merges the approved selections into a
-`RenderPayload` of `{ master, selected }` and returns the entrypoint Typst
-source string + the data payload. `POST /api/compile-pdf` forwards both to
-the compiler microservice, which writes them to a temp dir, runs
-`typst compile`, and returns the PDF (optionally persisting via the
-storage abstraction and a `GeneratedResume` row).
-
-### Traceability
-
-Each prompt has a `*_VERSION` constant. Each call produces an `LlmTrace`
-(`promptName`, `promptVersion`, `ms`, `mocked`, raw output). Phase 2 will
-also persist the trace alongside the `TailoringSession` for diffing /
-auditing later.
-
----
-
-<a id="data-model"></a>
-## 6. Data model
-
-See `apps/web/prisma/schema.prisma`. Entities:
-
-- `MasterResumeProfile` — holds the canonical master resume JSON (validated
-  with `MasterResumeSchema`).
-- `ContentBlock` — every selectable atom (summary variant, capability,
-  experience, experience bullet, project, education, certification,
-  language, additional experience). Indexed by `(profileId, type, active)`
-  and `(profileId, refId)`.
-- `JobOffer` — raw text + optional parsed `JobSignals`.
-- `TailoringSession` — the AI suggestions (Step 2–4 outputs) and the
-  user's `ApprovedTailoring` (Step 5 output).
-- `GeneratedResume` — final filename, Typst source, PDF path. Multiple
-  versions per `TailoringSession` are allowed (re-renders).
+The approval payload has been simplified compared with earlier iterations in this Space. The current design uses tailored skills at the top, simplified approved bullet rewrites, and a single keyword/tag line per role rendered beneath the experience bullets instead of a per-bullet keyword line. [cite:80][cite:83]
 
 ---
 
 <a id="api-surface"></a>
-## 7. API surface (route handlers in `apps/web/app/api/`)
+## 6. API surface
 
-| Method+path | Phase 1 behaviour |
+The current web app exposes these main route handlers under `apps/web/app/api`. [cite:12]
+
+| Method + path | Purpose |
 |---|---|
-| `POST /api/upload` | Accept a multipart file, return its text. |
-| `GET  /api/job-offers` | List recent offers. |
-| `POST /api/job-offers` | Create a new offer (paste / upload / url). |
-| `POST /api/parse-job` | Run mocked `parseJob`, persist signals onto the offer if `jobOfferId` is given. |
-| `POST /api/tailor` | Build a `TailoringSession` with mocked AI suggestions + deterministic recommendations. |
-| `POST /api/generate-typst` | Return `{ source, data, filename }` ready for the compiler. |
-| `POST /api/compile-pdf` | Forward to the compiler microservice; optionally persist a `GeneratedResume`. |
-| `GET/POST /api/resumes` | List / create generated-resume records. |
-| `POST /api/sample-pdf` | **Phase 1 smoke test.** Pulls the seed master resume + a hardcoded selection, compiles a real PDF, returns base64. |
+| `POST /api/upload` | Accept a multipart file and return extracted text. [cite:3] |
+| `GET/POST /api/job-offers` | List recent job offers or create one from pasted/uploaded text. [cite:3] |
+| `POST /api/parse-job` | Run structured extraction and optionally persist signals on the job offer. [cite:3] |
+| `POST /api/tailor` | Create a tailoring session with AI suggestions plus deterministic recommendations. [cite:3] |
+| `POST /api/generate-typst` | Build the Typst source and structured JSON payload for the selected template. [cite:3][cite:76] |
+| `POST /api/compile-pdf` | Send Typst source to the compiler, return the PDF, derive page count, and optionally persist the resume. [cite:3][cite:9] |
+| `GET/POST /api/resumes` | List or create generated resume records. [cite:3] |
+| `POST /api/sample-pdf` | Smoke-test the compiler/rendering chain with seeded data. [cite:3] |
+| `GET /api/provider-info` | Surface the currently configured AI provider to the UI. [cite:12] |
+
+---
+
+<a id="data-model"></a>
+## 7. Data model
+
+The key persisted entities remain:
+
+- `MasterResumeProfile` — the canonical seeded master resume JSON. [cite:3]
+- `ContentBlock` — selectable content atoms extracted from the master resume. [cite:3]
+- `JobOffer` — raw job-offer text and optional parsed signals. [cite:3]
+- `TailoringSession` — AI suggestions plus the approved tailoring document. [cite:3]
+- `GeneratedResume` — the final rendered output, Typst source, PDF path, and page count. [cite:3]
+
+At the product level, the approved document has evolved since the old README was written. Recent work replaced the older per-bullet keyword approach with per-role tag lines and simplified the bullet approval UI, intentionally as a clean break rather than a compatibility migration layer. [cite:80][cite:83]
 
 ---
 
 <a id="roadmap"></a>
-## 8. Three-phase roadmap
+## 8. Roadmap
 
-### Phase 1 — **done now**
+### Phase 1 — done
 
-Architecture validated end-to-end. Mocked AI. One-click sample PDF.
+End-to-end architecture, mock AI responses, and sample PDF generation were completed first to validate the basic pipeline. [cite:3]
 
-### Phase 2 — **in this build**
+### Phase 2 — done
 
-- **Hybrid LLM provider** — four backends selectable at runtime via
-  `AI_PROVIDER`:
-  - `mock` — deterministic offline mock (default).
-  - `ollama` — local model in Docker (default for shared builds, no
-    signup, no key, fully private).
-  - `anthropic` — real Claude Sonnet via `@anthropic-ai/sdk`.
-  - `perplexity` — Perplexity sonar via OpenAI-compatible API.
-  All four go through the same provider abstraction with Zod-validated
-  JSON output and a single automatic retry on schema failure.
-- **Parse-job UI** — "Parse with AI" button on the job-offer detail page
-  renders an extracted `JobSignals` card (required/preferred skills,
-  keywords, role themes, suggested emphasis).
-- **Tailoring session UI** — single sectioned page with summary review,
-  ranked capability bullets (checkboxes + ↑/↓ reorder), bullet rewrites
-  with original/AI/custom radios, and a manual-only checkbox picker for
-  education / projects / languages / certifications / additional.
-- **Save draft + Generate PDF** — explicit footer buttons (no autosave).
-  Save draft persists `ApprovedTailoring` onto the existing
-  `TailoringSession.approved` JSON column. Generate PDF runs the full
-  Typst pipeline, persists a `GeneratedResume` row, and surfaces the PDF
-  in an inline preview.
-- **Page-count soft warning** — `/api/compile-pdf` now parses the
-  resulting PDF with `pdf-lib` and stores `GeneratedResume.pageCount`.
-  When > 1 the preview shows a yellow advisory; we never reject the PDF.
-- **Version history** — the job-offer detail page lists every
-  `GeneratedResume` for that offer with timestamps.
+The project then shipped the real provider abstraction, parse-job UI, tailoring session UI, save-draft, PDF generation, page-count soft warning, and generated-resume history. That earlier “Phase 2” status in the old README is now stale. [cite:3]
 
-### Phase 2 — provider env vars
+### Phase 3 — in progress (current: 3.7)
 
-```env
-# apps/web/.env
-AI_PROVIDER=mock                 # mock | ollama | anthropic | perplexity
+Phase 3 has become the active product-shaping phase rather than a future placeholder. Based on the work already done in this Space, Phase 3 currently includes:
 
-# --- anthropic ---
-ANTHROPIC_API_KEY=sk-ant-...
-AI_MODEL=claude-sonnet-4-5
+- UX and state-management hardening of the tailoring session, especially around React effect loops and stable props. [cite:83]
+- A cleaner approved-tailoring model with tailored skills and per-role keyword lines. [cite:80][cite:82]
+- Continued Typst rendering improvements and template abstraction work. [cite:76][cite:79]
+- Introduction of user-selectable templates in the UI, starting with `neat-cv` and `brilliant-cv`. [cite:76][cite:78][web:15]
+- Ongoing compiler/template compatibility work, including Typst-version compatibility for `brilliant-cv` v4.x. `brilliant-cv` 4.0.1 requires Typst 0.14.0 or newer, so the compiler image must be upgraded from its existing 0.13.1 pin before that template works reliably. [web:15][web:89][web:94]
 
-# --- ollama (local Docker) ---
-OLLAMA_URL=http://localhost:11434  # inside compose: http://ollama:11434
-OLLAMA_MODEL=qwen2.5:7b-instruct
+### Later Phase 3 / Phase 4 candidates
 
-# --- perplexity ---
-PERPLEXITY_API_KEY=pplx-...
-PERPLEXITY_MODEL=sonar
-```
+These items still make sense as next steps once Phase 3.7 stabilises:
 
-#### Provider matrix
-
-| Provider     | Signup       | Cost          | Quality           | Hardware needed |
-| ------------ | ------------ | ------------- | ----------------- | --------------- |
-| `mock`       | none         | free          | deterministic     | none            |
-| `ollama`     | none         | free          | good (small LLM)  | ~8 GB RAM/VRAM  |
-| `anthropic`  | Anthropic    | pay-per-token | excellent         | none (cloud)    |
-| `perplexity` | Perplexity   | pay-per-token | good–very good   | none (cloud)    |
-
-#### Switching providers
-
-```bash
-# Local model (recommended default for sharing)
-pnpm docker:up:ollama                     # boots db + compiler + ollama + pulls qwen2.5
-# then in apps/web/.env:  AI_PROVIDER=ollama
-
-# Claude
-# in apps/web/.env:  AI_PROVIDER=anthropic  ANTHROPIC_API_KEY=...
-
-# Perplexity
-# in apps/web/.env:  AI_PROVIDER=perplexity  PERPLEXITY_API_KEY=...
-```
-
-The currently-active provider is displayed in the dashboard footer chip
-so you can verify at a glance which backend the app is talking to.
-
-The mock provider returns the same deterministic outputs Phase 1 used, so
-you can develop UI without burning credits or waiting on a local model.
-
-### Phase 2 — pause discipline
-
-Phase 2 is intentionally feature-complete but unproven against real
-Anthropic calls until you test it yourself. **Do not start Phase 3 until
-you have manually exercised the parse → tailor → review → generate flow.**
-
-### Phase 3 — **future**
-
-- Auth, dashboard polish, job-URL ingestion, diff viewer, recommended-mode,
-  better PDF preview (multi-page, page-count derived from PDF parser),
-  storage abstraction → S3, async queue if compile latency grows,
-  Vercel + private compiler tunnel deployment, iPad UX polish.
+- authentication and private multi-user workflows,
+- deployment hardening,
+- better storage backends,
+- diff views between versions,
+- job-URL ingestion,
+- more polished PDF preview and multi-page inspection,
+- and additional Typst templates beyond the current pair. [cite:3][cite:79]
 
 ---
 
-## Pause
+<a id="notes-on-templates"></a>
+## 9. Notes on templates
 
-**Build Phase 1, run the smoke test, do not start Phase 2 until I ask.**
+The original renderer uses `@preview/neat-cv`, and that path is stable in the current compiler flow. Recent work in this Space added a second adapter for `brilliant-cv` and a template selector in the UI so users can choose which Typst template to generate against. [cite:8][cite:76][cite:78][web:15]
+
+A few practical notes matter here:
+
+- `brilliant-cv` v4.0.1 is a breaking-line package that requires Typst 0.14.0 or newer. If the compiler image still uses Typst 0.13.1, `brilliant-cv` imports will fail until the Dockerfile pin is updated and the compiler image is rebuilt. [web:15][web:89][web:94]
+- The `brilliant-cv` package is profile-oriented and expects metadata/content modules, so the app uses an adapter template to map the app's JSON payload into the package's `cv-*` calls instead of adopting the package's raw file layout directly. [web:15][web:18][cite:79]
+- Because the app's payload is data-driven and may omit some keys, template adapters should use defensive dictionary access for optional JSON keys rather than direct field access when rendering external data in Typst. [web:62][web:63][web:73]
+
+---
+
+## Development note
+
+This README intentionally reflects the state of the project as reconstructed from the current repo plus recent work in this Space. The old README still described the app as Phase 2, but the conversations in this Space clearly show that the app has already moved through the later tailoring, rendering, and UI simplification work and is now in Phase 3.7. [cite:3][cite:80][cite:83]
