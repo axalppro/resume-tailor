@@ -12,7 +12,11 @@ import { PrismaClient } from "@prisma/client";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { MasterResumeSchema, type MasterResume } from "@resume-tailor/shared-types";
+import {
+  MasterResumeSchema,
+  type MasterResume,
+  normalizeBullets,
+} from "@resume-tailor/shared-types";
 
 const prisma = new PrismaClient();
 
@@ -86,17 +90,24 @@ async function main() {
       active: true,
       refId: e.id,
     });
-    for (const [i, b] of (e.bullets ?? []).entries()) {
+    // Phase 3.5: bullets may be legacy `string[]` or structured
+    // `{id,text,keywords[]}` — normalize both before exploding into
+    // ContentBlocks so the search / tailoring pipeline only ever sees the
+    // canonical text form here.
+    const normalisedBullets = normalizeBullets(e.bullets, e.id);
+    for (const [i, b] of normalisedBullets.entries()) {
       blocks.push({
         profileId: profile.id,
         type: "experience_bullet",
-        title: `${e.id}#${i}`,
-        content: b,
-        tags: e.tags,
+        title: b.id,
+        content: b.text,
+        // Per-bullet keywords first; fall back to entry-level keywords for
+        // legacy bullets that don't carry their own list yet.
+        tags: b.keywords.length > 0 ? b.keywords : e.tags,
         defaultPriority: 70,
-        truthSource: `master_resume.experience.${e.id}.bullets`,
+        truthSource: `master_resume.experience.${e.id}.bullets.${i}`,
         active: true,
-        refId: `${e.id}#${i}`,
+        refId: b.id,
       });
     }
   }

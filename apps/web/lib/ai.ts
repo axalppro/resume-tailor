@@ -29,7 +29,10 @@ import {
   type ContentBlock,
   type BlockRecommendation,
   type Directives,
+  type TailoredSkill,
+  type ExperienceBullet,
   TailorResponseSchema,
+  normalizeBullets,
 } from "@resume-tailor/shared-types";
 import {
   PARSE_JOB_SYSTEM,
@@ -38,6 +41,9 @@ import {
   TAILOR_SUMMARY_SYSTEM,
   TAILOR_SUMMARY_USER,
   TAILOR_SUMMARY_VERSION,
+  TAILOR_SKILLS_SYSTEM,
+  TAILOR_SKILLS_USER,
+  TAILOR_SKILLS_VERSION,
   REWRITE_BULLETS_SYSTEM,
   REWRITE_BULLETS_USER,
   REWRITE_BULLETS_VERSION,
@@ -192,16 +198,34 @@ const RewritesSchema = z.object({
       original: z.string(),
       suggested: z.string(),
       rationale: z.string(),
+      suggestedKeywords: z.array(z.string()).default([]),
     }),
   ),
 });
 
+/**
+ * Phase 3.5 rewrite-bullets input shape — carries per-bullet keywords so the
+ * model can pick a subset for the skill sub-line that renders under each
+ * bullet in the PDF.
+ */
+export interface RewriteBulletsInput {
+  id: string;
+  text: string;
+  keywords: string[];
+}
+
 export async function rewriteBullets(args: {
   signals: JobSignals;
-  bullets: { id: string; text: string }[];
+  bullets: RewriteBulletsInput[];
   directives?: Directives;
 }): Promise<{
-  rewrites: { targetId: string; original: string; suggested: string; rationale: string }[];
+  rewrites: {
+    targetId: string;
+    original: string;
+    suggested: string;
+    rationale: string;
+    suggestedKeywords: string[];
+  }[];
   trace: LlmTrace;
 }> {
   if (args.bullets.length === 0) {
@@ -232,7 +256,56 @@ export async function rewriteBullets(args: {
     }),
   };
   const { data, trace } = await runValidated(call, RewritesSchema);
-  return { rewrites: data.rewrites, trace };
+
+  // Defensive truth-rule enforcement: drop any suggestedKeyword that wasn't in
+  // the original bullet's keywords[]. The prompt forbids fabrication, but if
+  // the model slips, this is the last line of defence before the PDF.
+  const byId = new Map(args.bullets.map((b) => [b.id, new Set(b.keywords)]));
+  const cleaned = data.rewrites.map((r) => {
+    const allowed = byId.get(r.targetId);
+    const requested = r.suggestedKeywords ?? [];
+    return {
+      ...r,
+      suggestedKeywords: allowed
+        ? requested.filter((k) => allowed.has(k))
+        : [],
+    };
+  });
+  return { rewrites: cleaned, trace };
+}
+
+// =============================================================================
+// Step 4b — Tailor skills (replaces the legacy capability_pool pick)
+// =============================================================================
+const TailoredSkillsSchema = z.object({
+  skills: z.array(
+    z.object({
+      id: z.string(),
+      title: z.string().min(1),
+      details: z.string().min(1),
+      rationale: z.string(),
+    }),
+  ),
+});
+
+export async function tailorSkills(args: {
+  signals: JobSignals;
+  candidateFacts: unknown;
+  directives?: Directives;
+}): Promise<{ skills: TailoredSkill[]; trace: LlmTrace }> {
+  const call: LlmCall = {
+    promptName: "tailor-skills",
+    promptVersion: TAILOR_SKILLS_VERSION,
+    system: TAILOR_SKILLS_SYSTEM,
+    user: TAILOR_SKILLS_USER({
+      jobSignalsJson: JSON.stringify(args.signals, null, 2),
+      candidateFactsJson: JSON.stringify(args.candidateFacts, null, 2),
+      capabilitiesDirective: args.directives?.capabilities,
+      generalDirective: args.directives?.general,
+    }),
+  };
+  const { data, trace } = await runValidated(call, TailoredSkillsSchema);
+  return { skills: data.skills, trace };
 }
 
 // =============================================================================
@@ -270,44 +343,86 @@ export async function buildTailorResponse(args: {
   });
   traces.push(summary.trace);
 
-  // Controlled rewrite — only the top 5 most-relevant bullets get touched.
-  const allBullets = args.master.experience.flatMap((e) =>
-    (e.bullets ?? []).map((b, i) => ({ id: `${e.id}#${i}`, text: b })),
-  );
-  const bulletsInput = allBullets.slice(0, 5);
+  // Controlled rewrite — Phase 3.5 sends EVERY master bullet (no slice cap)
+  // so the user's BulletPicker UI can offer a checkbox for each one. Each
+  // bullet carries its own keywords[] (normalised from legacy string[] when
+  // needed) so the AI can pick the per-bullet skill sub-line.
+  const allBullets: { id: string; text: string; keywords: string[]; experienceId: string }[] =
+    args.master.experience.flatMap((e) => {
+      const normalised: ExperienceBullet[] = normalizeBullets(e.bullets, e.id);
+      return normalised.map((b) => ({
+        id: b.id,
+        text: b.text,
+        // Per-bullet keywords first; fall back to the entry-level keywords for
+        // legacy bullets that don't carry their own list yet.
+        keywords: b.keywords.length > 0 ? b.keywords : e.keywords,
+        experienceId: e.id,
+      }));
+    });
 
   const bullets = await rewriteBullets({
     signals: args.signals,
-    bullets: bulletsInput,
+    bullets: allBullets.map((b) => ({ id: b.id, text: b.text, keywords: b.keywords })),
     directives: args.directives,
   });
   traces.push(bullets.trace);
 
+  // Phase 3.5: skills are AI-synthesised, not picked from capability_pool.
+  const skills = await tailorSkills({
+    signals: args.signals,
+    candidateFacts: {
+      capabilities: args.master.capability_pool.map((c) => ({
+        text: c.text,
+        tags: c.tags,
+      })),
+      experience: args.master.experience.map((e) => ({
+        title: e.title,
+        org: e.org,
+        keywords: e.keywords,
+        tags: e.tags,
+        bullets: normalizeBullets(e.bullets, e.id).map((b) => b.text),
+      })),
+      projects: args.master.projects.map((p) => ({
+        title: p.title,
+        subtitle: p.subtitle,
+        keywords: p.keywords,
+      })),
+      education: args.master.education.map((e) => ({
+        title: e.title,
+        institution: e.institution,
+        keywords: e.keywords,
+      })),
+      certifications: args.master.certifications.map((c) => ({
+        title: c.title,
+        issuer: c.issuer,
+      })),
+      languages: args.master.languages.map((l) => l.name),
+    },
+    directives: args.directives,
+  });
+  traces.push(skills.trace);
+
   const recommendedBlocks = recommendBlocks(args.blocks, args.signals);
 
-  const capabilityRecs = recommendedBlocks
-    .filter((r) => r.blockType === "capability_bullet")
-    .slice(0, 6)
-    .map((r) => {
-      const blk = args.blocks.find((b) => b.id === r.blockId)!;
-      return {
-        id: blk.refId ?? blk.id,
-        text: blk.content,
-        rationale: r.reason,
-      };
-    });
+  // Build the per-bullet experienceId lookup so we can attach it to each
+  // SuggestedEdit — the UI groups bullets by experience entry.
+  const experienceIdByBulletId = new Map(
+    allBullets.map((b) => [b.id, b.experienceId]),
+  );
 
   const response: TailorResponse = {
     sessionId: args.sessionId,
     suggestedSummary: summary.summary,
-    suggestedCapabilities: capabilityRecs,
+    suggestedCapabilities: skills.skills,
     recommendedBlocks,
     bulletRewrites: bullets.rewrites.map((r) => ({
       fieldType: "experience_bullet",
       targetId: r.targetId,
+      experienceId: experienceIdByBulletId.get(r.targetId),
       original: r.original,
       suggested: r.suggested,
       rationale: r.rationale,
+      suggestedKeywords: r.suggestedKeywords,
     })),
   };
 

@@ -37,6 +37,31 @@ export const CapabilitySchema = z.object({
 
 const YearOrPresent = z.union([z.number().int(), z.literal("Present"), z.string()]);
 
+/**
+ * ExperienceBullet — a single, structured bullet on an experience entry.
+ *
+ * Phase 3.5: each bullet now owns its OWN keyword list (the tech / tool stack
+ * directly relevant to that accomplishment). The PDF renders the bullet text
+ * on one line, then a sub-line of ·-separated keywords, so the sub-line can
+ * vary per bullet instead of being shared across every bullet in the entry.
+ *
+ * Backwards compatibility: `ExperienceSchema.bullets` accepts BOTH the new
+ * structured shape AND the legacy `string[]` form via the `normalizeBullets`
+ * helper below — callers should never destructure `bullets` directly; they
+ * should go through `normalizeBullets(e.bullets, e.id)`.
+ */
+export const ExperienceBulletSchema = z.object({
+  id: z.string(),
+  text: z.string(),
+  keywords: z.array(z.string()).default([]),
+});
+export type ExperienceBullet = z.infer<typeof ExperienceBulletSchema>;
+
+export const ExperienceBulletInputSchema = z.union([
+  z.string(),
+  ExperienceBulletSchema,
+]);
+
 export const ExperienceSchema = z.object({
   id: z.string(),
   title: z.string(),
@@ -46,9 +71,36 @@ export const ExperienceSchema = z.object({
   end_year: YearOrPresent.optional(),
   keywords: z.array(z.string()).default([]),
   tags: z.array(z.string()).default([]),
-  bullets: z.array(z.string()).optional().default([]),
+  /**
+   * Bullets accept legacy `string[]` (Phase 1–2) OR new structured
+   * `ExperienceBullet[]` (Phase 3.5+). Always go through `normalizeBullets()`
+   * when reading.
+   */
+  bullets: z.array(ExperienceBulletInputSchema).optional().default([]),
 });
 export type Experience = z.infer<typeof ExperienceSchema>;
+
+/**
+ * Normalize an Experience.bullets value (legacy `string[]` OR new
+ * `{id,text,keywords[]}[]`) into the canonical structured form. Synthesises
+ * deterministic ids using the experience id + index when needed.
+ */
+export function normalizeBullets(
+  bullets: Experience["bullets"] | undefined,
+  experienceId: string,
+): ExperienceBullet[] {
+  if (!bullets || bullets.length === 0) return [];
+  return bullets.map((b, i) => {
+    if (typeof b === "string") {
+      return { id: `${experienceId}#${i}`, text: b, keywords: [] };
+    }
+    return {
+      id: b.id || `${experienceId}#${i}`,
+      text: b.text,
+      keywords: b.keywords ?? [],
+    };
+  });
+}
 
 export const EducationSchema = z.object({
   id: z.string(),

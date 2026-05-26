@@ -22,6 +22,8 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
+  ApprovedBulletRewrite,
+  ApprovedCapability,
   ApprovedTailoring,
   ContentBlockType,
   JobSignals,
@@ -29,9 +31,9 @@ import type {
   SuggestedEdit,
   TailorResponse,
 } from "@resume-tailor/shared-types";
-import { CapabilitiesRanked } from "./capabilities-ranked";
+import { SkillsRanked, type SkillSuggestion } from "./skills-ranked";
 import { SummaryReview } from "./summary-review";
-import { BulletRewritesReview } from "./bullet-rewrites-review";
+import { BulletPicker } from "./bullet-picker";
 import { CheckboxSectionPicker } from "./checkbox-section-picker";
 import { PDFPreview } from "./pdf-preview";
 
@@ -91,10 +93,10 @@ export function TailoringSession({
   // Approved-content state (driven by the children's onChange callbacks)
   const [approvedSummary, setApprovedSummary] = useState<string>("");
   const [approvedCapabilities, setApprovedCapabilities] = useState<
-    { id: string; text: string }[]
+    ApprovedCapability[]
   >([]);
   const [approvedBullets, setApprovedBullets] = useState<
-    { targetId: string; text: string }[]
+    ApprovedBulletRewrite[]
   >([]);
   const [selectedBlockIds, setSelectedBlockIds] = useState<string[]>([]);
 
@@ -143,8 +145,30 @@ export function TailoringSession({
     const a = initialSession?.approved as Partial<ApprovedTailoring> | null;
     if (!a) return;
     if (a.approvedSummary) setApprovedSummary(a.approvedSummary);
-    if (a.approvedCapabilities) setApprovedCapabilities(a.approvedCapabilities);
-    if (a.approvedBulletRewrites) setApprovedBullets(a.approvedBulletRewrites);
+    if (a.approvedCapabilities) {
+      // Hydrate with safe defaults so legacy `{id,text}` rows expose
+      // `title`/`details` for the SkillsRanked picker. The Typst renderer
+      // also tolerates this by dispatching on `first.title != ""`.
+      setApprovedCapabilities(
+        a.approvedCapabilities.map((c) => ({
+          id: c.id,
+          text: c.text ?? "",
+          title: c.title ?? "",
+          details: c.details ?? "",
+        })),
+      );
+    }
+    if (a.approvedBulletRewrites) {
+      setApprovedBullets(
+        a.approvedBulletRewrites.map((b) => ({
+          targetId: b.targetId,
+          experienceId: b.experienceId,
+          text: b.text,
+          keywords: b.keywords ?? [],
+          included: b.included ?? true,
+        })),
+      );
+    }
     // a.selected is intentionally not applied here — CheckboxSectionPicker
     // re-seeds from its own `recommendations` prop. See its safety comment.
   }, []);
@@ -402,16 +426,29 @@ export function TailoringSession({
       }
     }
 
+    // suggestedCapabilities is a discriminated union — new TailoredSkill
+    // ({title, details}) for fresh sessions, legacy {id, text} for any
+    // sessions cached/persisted before Phase 3.5. Build both fields so the
+    // Typst renderer's `first.title != ""` dispatch works either way.
+    const approvedCaps: ApprovedCapability[] = tr.suggestedCapabilities.map(
+      (c) => {
+        if ("title" in c) {
+          return { id: c.id, title: c.title, details: c.details, text: "" };
+        }
+        return { id: c.id, title: "", details: "", text: c.text };
+      },
+    );
+
     return {
       selected,
       approvedSummary: tr.suggestedSummary,
-      approvedCapabilities: tr.suggestedCapabilities.map((c) => ({
-        id: c.id,
-        text: c.text,
-      })),
+      approvedCapabilities: approvedCaps,
       approvedBulletRewrites: tr.bulletRewrites.map((b) => ({
         targetId: b.targetId,
+        experienceId: b.experienceId,
         text: b.suggested,
+        keywords: b.suggestedKeywords ?? [],
+        included: true,
       })),
     };
   }
@@ -654,25 +691,59 @@ export function TailoringSession({
             />
           </section>
 
-          {/* ============================================ Capabilities */}
+          {/* ============================================ Skills (tailored) */}
           <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-              4 — Capabilities (ranked)
+              4 — Skills (tailored)
             </h2>
-            <CapabilitiesRanked
-              suggestions={tailorResponse.suggestedCapabilities}
-              onChange={setApprovedCapabilities}
+            <SkillsRanked
+              suggestions={tailorResponse.suggestedCapabilities.map<SkillSuggestion>(
+                (s) =>
+                  "title" in s
+                    ? {
+                        id: s.id,
+                        title: s.title,
+                        details: s.details,
+                        rationale: s.rationale,
+                      }
+                    : { id: s.id, text: s.text, rationale: s.rationale },
+              )}
+              onChange={(rows) =>
+                setApprovedCapabilities(
+                  rows.map((r) => ({
+                    id: r.id,
+                    title: r.title,
+                    details: r.details,
+                    text: "",
+                  })),
+                )
+              }
             />
           </section>
 
-          {/* ============================================ Bullet rewrites */}
+          {/* ============================================ Bullet picker */}
           <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-              5 — Bullet rewrites
+              5 — Experience bullets
             </h2>
-            <BulletRewritesReview
+            <BulletPicker
               edits={bulletEditsForReview}
-              onChange={setApprovedBullets}
+              experiences={master.experience.map((e) => ({
+                id: e.id,
+                title: e.title,
+                org: e.org,
+              }))}
+              onChange={(rows) =>
+                setApprovedBullets(
+                  rows.map((r) => ({
+                    targetId: r.targetId,
+                    experienceId: r.experienceId,
+                    text: r.text,
+                    keywords: r.keywords,
+                    included: r.included,
+                  })),
+                )
+              }
             />
           </section>
 

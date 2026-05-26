@@ -10,7 +10,7 @@
 #import "@preview/neat-cv:1.0.0": cv, entry, item-with-level, cv-with-side, contact-info
 
 #import "./partials/helpers.typ": get-by-id, year-range, keyword-line, compact-entry
-#import "./partials/sections.typ": render-section, render-capabilities, render-languages, render-additional-experience
+#import "./partials/sections.typ": render-skills, render-experience-with-bullets, render-section, render-capabilities, render-languages, render-additional-experience
 
 #let payload = json("./resume-data.json")
 #let master   = payload.master
@@ -45,15 +45,29 @@
   }
 }
 
+// -----------------------------------------------------------------------------
+// Skills section — Phase 3.5 dispatcher.
+//
+// New shape (per JD): each approved capability has `{ title, details }`. The
+// renderer formats it as `*Title*: details`.
+//
+// Legacy shape (pre-3.5): `{ id, text }` only — falls back to a plain bullet.
+// We dispatch by inspecting the first entry's keys so old approved JSONs keep
+// rendering correctly.
+// -----------------------------------------------------------------------------
 #let approved-capabilities() = {
-  // If approvedCapabilities is non-empty, render those texts directly.
-  // Otherwise, fall back to looking up ids in master.capability_pool.
-  if "approvedCapabilities" in selected and selected.approvedCapabilities.len() > 0 [
-    = Skills
-    #for cap in selected.approvedCapabilities [
-      - #cap.text
+  if "approvedCapabilities" in selected and selected.approvedCapabilities.len() > 0 {
+    let first = selected.approvedCapabilities.at(0)
+    let new-shape = "title" in first and first.title != ""
+    if new-shape {
+      render-skills(selected.approvedCapabilities)
+    } else [
+      = Skills
+      #for cap in selected.approvedCapabilities [
+        - #cap.text
+      ]
     ]
-  ] else {
+  } else {
     render-capabilities(master, selected.capabilities)
   }
 }
@@ -69,7 +83,7 @@
 ][
 #approved-capabilities()
 
-#render-section("Professional Experience", master.experience, selected.experience, org-key: "org")
+#render-experience-with-bullets(master, selected, "Professional Experience")
 
 #render-section("Education", master.education, selected.education, org-key: "institution")
 

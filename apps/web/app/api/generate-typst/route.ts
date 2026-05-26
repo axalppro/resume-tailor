@@ -43,12 +43,16 @@ export async function POST(req: NextRequest) {
   const master = MasterResumeSchema.parse(profile.data);
   const source = await loadBaseTemplate();
 
+  // Phase 3.5: forward the approved bullet rewrites + keyword sub-lines into
+  // the Typst payload so the renderer can show per-bullet skill chips. Only
+  // bullets the user explicitly kept (included=true) are rendered.
   const payload = {
     master,
     selected: {
       ...parsed.data.approved.selected,
       approvedSummary: parsed.data.approved.approvedSummary,
       approvedCapabilities: parsed.data.approved.approvedCapabilities,
+      approvedBulletRewrites: parsed.data.approved.approvedBulletRewrites,
     },
   };
 
