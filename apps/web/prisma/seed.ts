@@ -101,9 +101,10 @@ async function main() {
         type: "experience_bullet",
         title: b.id,
         content: b.text,
-        // Per-bullet keywords first; fall back to entry-level keywords for
-        // legacy bullets that don't carry their own list yet.
-        tags: b.keywords.length > 0 ? b.keywords : e.tags,
+        // Phase 3.6: bullets no longer carry per-bullet keywords. Tag each
+        // bullet block with the parent experience entry's tag list so the
+        // search index still surfaces the right rows.
+        tags: e.tags,
         defaultPriority: 70,
         truthSource: `master_resume.experience.${e.id}.bullets.${i}`,
         active: true,

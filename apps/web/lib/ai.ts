@@ -30,7 +30,7 @@ import {
   type BlockRecommendation,
   type Directives,
   type TailoredSkill,
-  type ExperienceBullet,
+  type SuggestedExperienceTags,
   TailorResponseSchema,
   normalizeBullets,
 } from "@resume-tailor/shared-types";
@@ -47,6 +47,9 @@ import {
   REWRITE_BULLETS_SYSTEM,
   REWRITE_BULLETS_USER,
   REWRITE_BULLETS_VERSION,
+  TAILOR_EXPERIENCE_TAGS_SYSTEM,
+  TAILOR_EXPERIENCE_TAGS_USER,
+  TAILOR_EXPERIENCE_TAGS_VERSION,
 } from "@resume-tailor/prompts";
 import { z, type ZodSchema } from "zod";
 import { validateLlmJson } from "./validation";
@@ -198,20 +201,17 @@ const RewritesSchema = z.object({
       original: z.string(),
       suggested: z.string(),
       rationale: z.string(),
-      suggestedKeywords: z.array(z.string()).default([]),
     }),
   ),
 });
 
 /**
- * Phase 3.5 rewrite-bullets input shape — carries per-bullet keywords so the
- * model can pick a subset for the skill sub-line that renders under each
- * bullet in the PDF.
+ * Phase 3.6 rewrite-bullets input shape — plain bullets only. Keyword
+ * selection moved out to `tailorExperienceTags`, which runs once per role.
  */
 export interface RewriteBulletsInput {
   id: string;
   text: string;
-  keywords: string[];
 }
 
 export async function rewriteBullets(args: {
@@ -224,7 +224,6 @@ export async function rewriteBullets(args: {
     original: string;
     suggested: string;
     rationale: string;
-    suggestedKeywords: string[];
   }[];
   trace: LlmTrace;
 }> {
@@ -256,22 +255,7 @@ export async function rewriteBullets(args: {
     }),
   };
   const { data, trace } = await runValidated(call, RewritesSchema);
-
-  // Defensive truth-rule enforcement: drop any suggestedKeyword that wasn't in
-  // the original bullet's keywords[]. The prompt forbids fabrication, but if
-  // the model slips, this is the last line of defence before the PDF.
-  const byId = new Map(args.bullets.map((b) => [b.id, new Set(b.keywords)]));
-  const cleaned = data.rewrites.map((r) => {
-    const allowed = byId.get(r.targetId);
-    const requested = r.suggestedKeywords ?? [];
-    return {
-      ...r,
-      suggestedKeywords: allowed
-        ? requested.filter((k) => allowed.has(k))
-        : [],
-    };
-  });
-  return { rewrites: cleaned, trace };
+  return { rewrites: data.rewrites, trace };
 }
 
 // =============================================================================
@@ -309,6 +293,87 @@ export async function tailorSkills(args: {
 }
 
 // =============================================================================
+// Step 4c — Phase 3.6: per-role keyword line ("Tech: …") synthesised from the
+// entire master keyword pool. Truth filter rejects any tag not in the pool.
+// =============================================================================
+const ExperienceTagsSchema = z.object({
+  tags: z.array(
+    z.object({
+      experienceId: z.string(),
+      tags: z.array(z.string()).default([]),
+      rationale: z.string().default(""),
+    }),
+  ),
+});
+
+interface TailorExperienceTagsInput {
+  id: string;
+  title: string;
+  org: string;
+  bullets: string[];
+  ownKeywords: string[];
+}
+
+export async function tailorExperienceTags(args: {
+  signals: JobSignals;
+  experiences: TailorExperienceTagsInput[];
+  masterKeywordPool: string[];
+  directives?: Directives;
+}): Promise<{ tags: SuggestedExperienceTags[]; trace: LlmTrace }> {
+  if (args.experiences.length === 0) {
+    return {
+      tags: [],
+      trace: {
+        promptName: "tailor-experience-tags",
+        promptVersion: TAILOR_EXPERIENCE_TAGS_VERSION,
+        system: TAILOR_EXPERIENCE_TAGS_SYSTEM,
+        user: "",
+        rawOutput: '{"tags":[]}',
+        ms: 0,
+        mocked: true,
+        model: "skipped",
+      },
+    };
+  }
+  const call: LlmCall = {
+    promptName: "tailor-experience-tags",
+    promptVersion: TAILOR_EXPERIENCE_TAGS_VERSION,
+    system: TAILOR_EXPERIENCE_TAGS_SYSTEM,
+    user: TAILOR_EXPERIENCE_TAGS_USER({
+      jobSignalsJson: JSON.stringify(args.signals, null, 2),
+      experiencesJson: JSON.stringify(args.experiences, null, 2),
+      masterKeywordPoolJson: JSON.stringify(args.masterKeywordPool, null, 2),
+      generalDirective: args.directives?.general,
+    }),
+  };
+  const { data, trace } = await runValidated(call, ExperienceTagsSchema);
+
+  // Truth-rule enforcement: drop any tag not present in the master pool.
+  // Case-insensitive match, but we preserve the master's canonical casing.
+  const canonicalByLower = new Map<string, string>();
+  for (const k of args.masterKeywordPool) {
+    canonicalByLower.set(k.toLowerCase(), k);
+  }
+  const cleaned: SuggestedExperienceTags[] = data.tags.map((row) => {
+    const seen = new Set<string>();
+    const tags: string[] = [];
+    for (const t of row.tags ?? []) {
+      const canonical = canonicalByLower.get(t.toLowerCase());
+      if (canonical && !seen.has(canonical)) {
+        seen.add(canonical);
+        tags.push(canonical);
+      }
+    }
+    return {
+      experienceId: row.experienceId,
+      tags,
+      rationale: row.rationale ?? "",
+    };
+  });
+  return { tags: cleaned, trace };
+}
+
+// =============================================================================
 // High-level "produce a full TailorResponse" — used by /api/tailor.
 // =============================================================================
 export async function buildTailorResponse(args: {
@@ -343,26 +408,22 @@ export async function buildTailorResponse(args: {
   });
   traces.push(summary.trace);
 
-  // Controlled rewrite — Phase 3.5 sends EVERY master bullet (no slice cap)
-  // so the user's BulletPicker UI can offer a checkbox for each one. Each
-  // bullet carries its own keywords[] (normalised from legacy string[] when
-  // needed) so the AI can pick the per-bullet skill sub-line.
-  const allBullets: { id: string; text: string; keywords: string[]; experienceId: string }[] =
+  // Controlled rewrite — Phase 3.6 sends EVERY master bullet (no slice cap)
+  // so the user's BulletPicker UI can offer a checkbox for each one. Per-bullet
+  // keyword selection was removed in Phase 3.6; keywords are now per-role.
+  const allBullets: { id: string; text: string; experienceId: string }[] =
     args.master.experience.flatMap((e) => {
-      const normalised: ExperienceBullet[] = normalizeBullets(e.bullets, e.id);
+      const normalised = normalizeBullets(e.bullets, e.id);
       return normalised.map((b) => ({
         id: b.id,
         text: b.text,
-        // Per-bullet keywords first; fall back to the entry-level keywords for
-        // legacy bullets that don't carry their own list yet.
-        keywords: b.keywords.length > 0 ? b.keywords : e.keywords,
         experienceId: e.id,
       }));
     });
 
   const bullets = await rewriteBullets({
     signals: args.signals,
-    bullets: allBullets.map((b) => ({ id: b.id, text: b.text, keywords: b.keywords })),
+    bullets: allBullets.map((b) => ({ id: b.id, text: b.text })),
     directives: args.directives,
   });
   traces.push(bullets.trace);
@@ -410,6 +471,43 @@ export async function buildTailorResponse(args: {
     allBullets.map((b) => [b.id, b.experienceId]),
   );
 
+  // Phase 3.6: per-role keyword line. Build the master keyword pool from
+  // the union of every keyword/tag anywhere in the master — the AI is allowed
+  // to pick freely from this pool, but a defensive filter in tailorExperienceTags
+  // drops anything not in it.
+  const masterKeywordPool = Array.from(
+    new Set<string>([
+      ...args.master.capability_pool.flatMap((c) => c.tags),
+      ...args.master.experience.flatMap((e) => [...e.keywords, ...e.tags]),
+      ...args.master.projects.flatMap((p) => [...p.keywords, ...p.tags]),
+      ...args.master.certifications.flatMap((c) => c.tags),
+      ...args.master.languages.flatMap((l) => l.tags),
+      ...args.master.education.flatMap((e) => [...e.keywords, ...e.tags]),
+      ...args.master.additional_experience.flatMap((e) => [
+        ...e.keywords,
+        ...e.tags,
+      ]),
+    ]),
+  );
+
+  const expTagsInput: TailorExperienceTagsInput[] = args.master.experience.map(
+    (e) => ({
+      id: e.id,
+      title: e.title,
+      org: e.org,
+      bullets: normalizeBullets(e.bullets, e.id).map((b) => b.text),
+      ownKeywords: e.keywords,
+    }),
+  );
+
+  const expTags = await tailorExperienceTags({
+    signals: args.signals,
+    experiences: expTagsInput,
+    masterKeywordPool,
+    directives: args.directives,
+  });
+  traces.push(expTags.trace);
+
   const response: TailorResponse = {
     sessionId: args.sessionId,
     suggestedSummary: summary.summary,
@@ -422,8 +520,8 @@ export async function buildTailorResponse(args: {
       original: r.original,
       suggested: r.suggested,
       rationale: r.rationale,
-      suggestedKeywords: r.suggestedKeywords,
     })),
+    experienceTags: expTags.tags,
   };
 
   return {

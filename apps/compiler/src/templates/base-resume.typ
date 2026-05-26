@@ -46,27 +46,14 @@
 }
 
 // -----------------------------------------------------------------------------
-// Skills section — Phase 3.5 dispatcher.
-//
-// New shape (per JD): each approved capability has `{ title, details }`. The
-// renderer formats it as `*Title*: details`.
-//
-// Legacy shape (pre-3.5): `{ id, text }` only — falls back to a plain bullet.
-// We dispatch by inspecting the first entry's keys so old approved JSONs keep
-// rendering correctly.
+// Skills section — Phase 3.6: every approved capability is the new
+// `{ id, title, details }` shape (legacy `text` field removed by the clean
+// break). Empty `approvedCapabilities` falls back to picking from the
+// master capability_pool by id so the rest of the document still renders.
 // -----------------------------------------------------------------------------
 #let approved-capabilities() = {
   if "approvedCapabilities" in selected and selected.approvedCapabilities.len() > 0 {
-    let first = selected.approvedCapabilities.at(0)
-    let new-shape = "title" in first and first.title != ""
-    if new-shape {
-      render-skills(selected.approvedCapabilities)
-    } else [
-      = Skills
-      #for cap in selected.approvedCapabilities [
-        - #cap.text
-      ]
-    ]
+    render-skills(selected.approvedCapabilities)
   } else {
     render-capabilities(master, selected.capabilities)
   }

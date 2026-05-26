@@ -31,6 +31,11 @@
   ]
 }
 
+// Legacy alias kept so `base-resume.typ` keeps compiling if it still calls
+// `render-capabilities`. Phase 3.6 sessions never hit this branch — the
+// approved-capabilities path in base-resume.typ dispatches to render-skills.
+
+
 #let render-capabilities(master, ids) = {
   if ids.len() > 0 [
     = Skills
@@ -62,19 +67,23 @@
 }
 
 // =============================================================================
-// Phase 3.5: render-experience-with-bullets
+// Phase 3.6: render-experience-with-bullets
 // -----------------------------------------------------------------------------
 // Renders the Professional Experience section using user-approved bullets +
-// their per-bullet skill sub-lines. For each experience entry the user kept
-// (selected.experience), we look up the approved bullets in
+// one consolidated per-ROLE keyword line. For each experience entry the user
+// kept (selected.experience), we look up the approved bullets in
 // `selected.approvedBulletRewrites` (grouped by experienceId) and render:
 //
-//   - <main STAR bullet text>
-//     _<keyword · keyword · keyword>_
+//   <Title>           <Org>     <Dates>     <Location>
+//   - <STAR bullet 1>
+//   - <STAR bullet 2>
+//   _Tech: kw · kw · kw_
 //
-// Bullets where `included == false` are skipped. If no approved bullets exist
-// for an entry, we fall back to the entry's `compact-entry` keyword line so
-// the old rendering keeps working for pre-3.5 sessions.
+// The Tech sub-line is sourced from `selected.approvedExperienceTags`
+// (matched by experienceId). Empty tags or unknown role — the sub-line is
+// omitted entirely. Bullets with `included == false` are skipped. If no
+// approved bullets exist for an entry, we fall back to the legacy
+// compact-entry rendering so older selections still display.
 // =============================================================================
 #let render-experience-with-bullets(master, selected, title) = {
   if "experience" in selected and selected.experience.len() > 0 [
@@ -94,12 +103,20 @@
           }
         }
 
-        // Header row (title — org — dates — location).
+        // Look up the per-role Tech keyword line.
+        let role-tags = ()
+        if "approvedExperienceTags" in selected {
+          for t in selected.approvedExperienceTags {
+            if t.experienceId == item.id {
+              role-tags = t.tags
+            }
+          }
+        }
+
         let org = if "org" in item { item.org } else { "" }
         let loc = if "location" in item and item.location != "" { item.location } else { "" }
 
         if approved-bullets.len() > 0 {
-          // Render with per-bullet body.
           entry(
             title: item.title,
             date: year-range(item),
@@ -108,14 +125,13 @@
           )[
             #for b in approved-bullets [
               - #b.text
-              #if "keywords" in b and b.keywords.len() > 0 [
-                #h(1em)#emph(b.keywords.join(" · "))
-              ]
+            ]
+            #if role-tags.len() > 0 [
+              #emph[Tech: #role-tags.join(" · ")]
             ]
           ]
         } else {
-          // No approved bullets for this entry — fall back to the legacy
-          // compact-entry rendering (entry-level keyword line).
+          // No approved bullets for this entry — legacy fallback.
           compact-entry(item, org-key: "org")
         }
       }

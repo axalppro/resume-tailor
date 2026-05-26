@@ -40,20 +40,19 @@ const YearOrPresent = z.union([z.number().int(), z.literal("Present"), z.string(
 /**
  * ExperienceBullet — a single, structured bullet on an experience entry.
  *
- * Phase 3.5: each bullet now owns its OWN keyword list (the tech / tool stack
- * directly relevant to that accomplishment). The PDF renders the bullet text
- * on one line, then a sub-line of ·-separated keywords, so the sub-line can
- * vary per bullet instead of being shared across every bullet in the entry.
+ * Phase 3.6: simplified back to `{id, text}` only. The keyword sub-line is
+ * now per-ROLE (consolidated into `approvedExperienceTags[]`) rather than
+ * per-bullet — cleaner information architecture, less visual noise on the
+ * page, and a 1:1 match with brilliant-CV's `cv-entry(tags: (...))` API for
+ * the upcoming Phase 4 template port.
  *
- * Backwards compatibility: `ExperienceSchema.bullets` accepts BOTH the new
- * structured shape AND the legacy `string[]` form via the `normalizeBullets`
- * helper below — callers should never destructure `bullets` directly; they
- * should go through `normalizeBullets(e.bullets, e.id)`.
+ * Bullets still accept either the new `{id,text}` shape or a legacy
+ * `string[]` form; callers must go through `normalizeBullets(e.bullets, e.id)`
+ * instead of destructuring `bullets` directly.
  */
 export const ExperienceBulletSchema = z.object({
   id: z.string(),
   text: z.string(),
-  keywords: z.array(z.string()).default([]),
 });
 export type ExperienceBullet = z.infer<typeof ExperienceBulletSchema>;
 
@@ -92,12 +91,11 @@ export function normalizeBullets(
   if (!bullets || bullets.length === 0) return [];
   return bullets.map((b, i) => {
     if (typeof b === "string") {
-      return { id: `${experienceId}#${i}`, text: b, keywords: [] };
+      return { id: `${experienceId}#${i}`, text: b };
     }
     return {
       id: b.id || `${experienceId}#${i}`,
       text: b.text,
-      keywords: b.keywords ?? [],
     };
   });
 }

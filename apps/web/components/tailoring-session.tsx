@@ -24,6 +24,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   ApprovedBulletRewrite,
   ApprovedCapability,
+  ApprovedExperienceTags,
   ApprovedTailoring,
   ContentBlockType,
   JobSignals,
@@ -34,6 +35,7 @@ import type {
 import { SkillsRanked, type SkillSuggestion } from "./skills-ranked";
 import { SummaryReview } from "./summary-review";
 import { BulletPicker } from "./bullet-picker";
+import { ExperienceTagsEditor } from "./experience-tags-editor";
 import { CheckboxSectionPicker } from "./checkbox-section-picker";
 import { PDFPreview } from "./pdf-preview";
 
@@ -98,6 +100,9 @@ export function TailoringSession({
   const [approvedBullets, setApprovedBullets] = useState<
     ApprovedBulletRewrite[]
   >([]);
+  const [approvedExperienceTags, setApprovedExperienceTags] = useState<
+    ApprovedExperienceTags[]
+  >([]);
   const [selectedBlockIds, setSelectedBlockIds] = useState<string[]>([]);
 
   // PDF preview
@@ -146,15 +151,13 @@ export function TailoringSession({
     if (!a) return;
     if (a.approvedSummary) setApprovedSummary(a.approvedSummary);
     if (a.approvedCapabilities) {
-      // Hydrate with safe defaults so legacy `{id,text}` rows expose
-      // `title`/`details` for the SkillsRanked picker. The Typst renderer
-      // also tolerates this by dispatching on `first.title != ""`.
+      // Phase 3.6 clean break: ApprovedCapability is always {id,title,details}.
+      // Old sessions are wiped by `prisma migrate reset`, so we assert directly.
       setApprovedCapabilities(
         a.approvedCapabilities.map((c) => ({
           id: c.id,
-          text: c.text ?? "",
-          title: c.title ?? "",
-          details: c.details ?? "",
+          title: c.title,
+          details: c.details,
         })),
       );
     }
@@ -164,8 +167,15 @@ export function TailoringSession({
           targetId: b.targetId,
           experienceId: b.experienceId,
           text: b.text,
-          keywords: b.keywords ?? [],
           included: b.included ?? true,
+        })),
+      );
+    }
+    if (a.approvedExperienceTags) {
+      setApprovedExperienceTags(
+        a.approvedExperienceTags.map((t) => ({
+          experienceId: t.experienceId,
+          tags: t.tags ?? [],
         })),
       );
     }
@@ -283,6 +293,7 @@ export function TailoringSession({
       approvedSummary: approvedSummary || defaultSummary,
       approvedCapabilities,
       approvedBulletRewrites: approvedBullets,
+      approvedExperienceTags,
     };
   }, [
     tailorResponse,
@@ -290,6 +301,7 @@ export function TailoringSession({
     approvedCapabilities,
     approvedSummary,
     approvedBullets,
+    approvedExperienceTags,
     master,
     defaultHeadline,
     defaultSummary,
@@ -426,17 +438,9 @@ export function TailoringSession({
       }
     }
 
-    // suggestedCapabilities is a discriminated union — new TailoredSkill
-    // ({title, details}) for fresh sessions, legacy {id, text} for any
-    // sessions cached/persisted before Phase 3.5. Build both fields so the
-    // Typst renderer's `first.title != ""` dispatch works either way.
+    // Phase 3.6: suggestedCapabilities is now plain TailoredSkill[].
     const approvedCaps: ApprovedCapability[] = tr.suggestedCapabilities.map(
-      (c) => {
-        if ("title" in c) {
-          return { id: c.id, title: c.title, details: c.details, text: "" };
-        }
-        return { id: c.id, title: "", details: "", text: c.text };
-      },
+      (c) => ({ id: c.id, title: c.title, details: c.details }),
     );
 
     return {
@@ -447,8 +451,11 @@ export function TailoringSession({
         targetId: b.targetId,
         experienceId: b.experienceId,
         text: b.suggested,
-        keywords: b.suggestedKeywords ?? [],
         included: true,
+      })),
+      approvedExperienceTags: tr.experienceTags.map((t) => ({
+        experienceId: t.experienceId,
+        tags: t.tags,
       })),
     };
   }
@@ -510,6 +517,7 @@ export function TailoringSession({
       setApprovedSummary(approved.approvedSummary);
       setApprovedCapabilities(approved.approvedCapabilities);
       setApprovedBullets(approved.approvedBulletRewrites);
+      setApprovedExperienceTags(approved.approvedExperienceTags);
       setSelectedBlockIds(
         tr.recommendedBlocks.filter((b) => b.recommendedDefault).map((b) => b.blockId),
       );
@@ -698,15 +706,12 @@ export function TailoringSession({
             </h2>
             <SkillsRanked
               suggestions={tailorResponse.suggestedCapabilities.map<SkillSuggestion>(
-                (s) =>
-                  "title" in s
-                    ? {
-                        id: s.id,
-                        title: s.title,
-                        details: s.details,
-                        rationale: s.rationale,
-                      }
-                    : { id: s.id, text: s.text, rationale: s.rationale },
+                (s) => ({
+                  id: s.id,
+                  title: s.title,
+                  details: s.details,
+                  rationale: s.rationale,
+                }),
               )}
               onChange={(rows) =>
                 setApprovedCapabilities(
@@ -714,7 +719,6 @@ export function TailoringSession({
                     id: r.id,
                     title: r.title,
                     details: r.details,
-                    text: "",
                   })),
                 )
               }
@@ -739,11 +743,30 @@ export function TailoringSession({
                     targetId: r.targetId,
                     experienceId: r.experienceId,
                     text: r.text,
-                    keywords: r.keywords,
                     included: r.included,
                   })),
                 )
               }
+            />
+          </section>
+
+          {/* ============================================ Per-role keyword tags */}
+          <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+              5b — Role keywords
+            </h2>
+            <ExperienceTagsEditor
+              experiences={master.experience.map((e) => ({
+                id: e.id,
+                title: e.title,
+                org: e.org,
+              }))}
+              suggestions={tailorResponse.experienceTags.map((t) => ({
+                experienceId: t.experienceId,
+                tags: t.tags,
+                rationale: t.rationale,
+              }))}
+              onChange={setApprovedExperienceTags}
             />
           </section>
 

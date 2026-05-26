@@ -21,9 +21,8 @@ const MOCK_TAILORED_SUMMARY =
   "Hands-on embedded systems engineer with firmware experience on STM32 and Nordic nRF platforms, BLE/SPI/I2C bring-up, and industrial IoT integrations using Docker, InfluxDB, and Grafana. Comfortable owning features from bench debugging to deployed product.";
 
 /**
- * Phase 3.5 mock: bullets now carry `suggestedKeywords` — a subset of each
- * bullet's input keywords[]. The mock targets the same seed bullets as before;
- * the BulletPicker in the UI shows checkboxes for every master bullet.
+ * Phase 3.6 mock: bullets are plain text rewrites (no per-bullet keywords).
+ * The keyword sub-line is now per-role — see MOCK_EXPERIENCE_TAGS below.
  */
 const MOCK_BULLET_REWRITES = [
   {
@@ -34,7 +33,6 @@ const MOCK_BULLET_REWRITES = [
       "Accomplished bench-validated calibration tooling for industrial PLC deployments by designing Go and C++/Qt APIs that streamlined hardware test cycles.",
     rationale:
       "STAR rewrite: leads with the verb, makes the measurable outcome (streamlined hardware test cycles) explicit, and keeps the underlying tools intact.",
-    suggestedKeywords: ["Go", "C++", "Qt", "PLC", "Calibration software"],
   },
   {
     targetId: "hes-so-research-assistant#1",
@@ -44,7 +42,6 @@ const MOCK_BULLET_REWRITES = [
       "Accomplished a production-ready private 5G station, as measured by successful SIM provisioning and throughput benchmarks, by designing and deploying it end-to-end.",
     rationale:
       "STAR rewrite that surfaces a measurable outcome (provisioning + throughput) without fabricating numbers.",
-    suggestedKeywords: ["Private 5G", "SIM provisioning", "Performance analysis"],
   },
   {
     targetId: "hes-so-research-assistant#2",
@@ -54,7 +51,21 @@ const MOCK_BULLET_REWRITES = [
       "Accomplished operator visibility into industrial telemetry by implementing Grafana dashboards over InfluxDB time-series data.",
     rationale:
       "STAR rewrite that ties the dashboards to operator visibility, the measurable outcome.",
-    suggestedKeywords: ["Grafana", "InfluxDB"],
+  },
+];
+
+/**
+ * Phase 3.6 mock: per-role keyword line. One entry per experience role. The
+ * defensive filter in `tailorExperienceTags` would normally drop anything not
+ * in the master keyword pool — these picks are chosen to match what the seed
+ * master resume contains, so they survive the filter unchanged.
+ */
+const MOCK_EXPERIENCE_TAGS = [
+  {
+    experienceId: "hes-so-research-assistant",
+    tags: ["C++", "Go", "Qt", "Docker", "InfluxDB", "Grafana", "Private 5G"],
+    rationale:
+      "Surfaces the JD's preferred tooling (Docker, Grafana, InfluxDB) plus the differentiator (Private 5G).",
   },
 ];
 
@@ -127,6 +138,10 @@ export class MockProvider implements LlmProvider {
       case "tailor-skills":
         // Phase 3.5: AI-synthesised Skills section.
         rawOutput = JSON.stringify({ skills: MOCK_TAILORED_SKILLS });
+        break;
+      case "tailor-experience-tags":
+        // Phase 3.6: per-role consolidated keyword line.
+        rawOutput = JSON.stringify({ tags: MOCK_EXPERIENCE_TAGS });
         break;
       case "suggest-sections":
         // Recommendations are computed deterministically by `recommendBlocks`

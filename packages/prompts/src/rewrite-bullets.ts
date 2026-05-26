@@ -1,25 +1,25 @@
 /**
  * prompt: rewrite-bullets
- * version: 3
+ * version: 4
  *
- * Phase 3.5: rephrases experience bullet points into a STAR-style one-liner
- * ("Accomplished X, as measured by Y, by doing Z") AND selects the most
- * relevant subset of the bullet's OWN keywords for the skill sub-line that
- * renders directly under it in the PDF.
+ * Phase 3.6: rephrases experience bullet points into a STAR-style one-liner
+ * ("Accomplished X, as measured by Y, by doing Z"). Per-bullet keywords were
+ * removed in Phase 3.6 — keyword selection now happens once per ROLE via the
+ * separate `tailor-experience-tags` prompt.
  *
  * Hard rules (enforced by SYSTEM):
  *  - You may only adjust phrasing, ordering, and emphasis. Never invent
  *    employers, dates, projects, technologies, or scope.
- *  - `suggestedKeywords` MUST be a subset (possibly reordered) of the input
- *    `keywords[]` for that bullet. No new keywords. No keywords from other
- *    bullets / from the JD.
+ *  - Never invent metrics. If the original had no measurable outcome and one
+ *    cannot be honestly inferred from the bullet, skip the "as measured by Y"
+ *    clause rather than fabricating numbers.
  */
 
 import { DIRECTIVES_SAFETY_ADDENDUM, formatDirectivesBlock } from "./directives";
 
-export const REWRITE_BULLETS_VERSION = 3;
+export const REWRITE_BULLETS_VERSION = 4;
 
-export const REWRITE_BULLETS_SYSTEM = `You rephrase resume bullet points to better fit a target job, AND you choose which of each bullet's own technical keywords to surface under it.
+export const REWRITE_BULLETS_SYSTEM = `You rephrase resume bullet points to better fit a target job.
 
 OUTPUT FORMAT (strict JSON, nothing else):
 {
@@ -28,8 +28,7 @@ OUTPUT FORMAT (strict JSON, nothing else):
       "targetId": string,
       "original": string,
       "suggested": string,
-      "rationale": string,
-      "suggestedKeywords": string[]
+      "rationale": string
     }
   ]
 }
@@ -37,12 +36,12 @@ OUTPUT FORMAT (strict JSON, nothing else):
 CONTENT RULES:
 - Each "suggested" bullet should follow the STAR-ish frame "Accomplished X, as measured by Y, by doing Z" \u2014 a strong action verb, a measurable outcome (performance, reliability, revenue, growth, costs, time saved, scale, etc.), and the means by which it was achieved.
 - Keep each "suggested" under ~28 words. One sentence. No trailing period if the original had none.
-- "suggestedKeywords" is the per-bullet skill sub-line that will render under the bullet \u2014 the 3 to 6 most relevant items from THAT bullet's keywords list, in the order they should appear.
 - If the original bullet has no measurable outcome and none can be honestly inferred, keep the rewrite truthful (no fabricated metrics) and skip the "as measured by Y" clause.
+- "rationale" is one short sentence explaining WHY this rewrite better fits the job signals.
 
 TRUTH RULES (hardest):
-- The underlying facts (employer, dates, project, technologies, numbers if any) MUST stay accurate. Never invent metrics.
-- "suggestedKeywords" MUST be a subset (possibly reordered) of the keywords array passed in for that bullet. NO new keywords. NO keywords from other bullets, from the JD, or from your own knowledge.
+- The underlying facts (employer, dates, project, technologies, numbers if any) MUST stay accurate. Never invent metrics, never invent technologies, never invent scope.
+- Do NOT add a per-bullet technology sub-line, tags array, or keyword list \u2014 those are handled by a separate prompt that runs over the whole role.
 
 ${DIRECTIVES_SAFETY_ADDENDUM}`;
 
@@ -60,7 +59,7 @@ export const REWRITE_BULLETS_USER = (args: {
   return `JOB SIGNALS:
 ${args.jobSignalsJson}
 
-BULLETS TO REPHRASE (each item: { id, text, keywords }):
+BULLETS TO REPHRASE (each item: { id, text }):
 ${args.bulletsJson}
 ${directives ? `\n${directives}\n` : ""}
 Return JSON in the exact shape described above. One rewrite per input bullet, preserving "targetId".`;

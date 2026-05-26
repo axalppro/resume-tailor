@@ -118,13 +118,6 @@ export const SuggestedEditSchema = z.object({
   original: z.string(),
   suggested: z.string(),
   rationale: z.string(),
-  /**
-   * Phase 3.5: per-bullet skill keywords selected by the AI from the bullet's
-   * own master `keywords[]`. The AI may REORDER the existing list and pick a
-   * relevant subset, but it MUST NOT add new keywords — anything else is
-   * fabrication and is rejected by the prompt's hard rules.
-   */
-  suggestedKeywords: z.array(z.string()).default([]),
 });
 export type SuggestedEdit = z.infer<typeof SuggestedEditSchema>;
 
@@ -169,72 +162,89 @@ export const BlockRecommendationSchema = z.object({
 });
 export type BlockRecommendation = z.infer<typeof BlockRecommendationSchema>;
 
+/**
+ * SuggestedExperienceTags — Phase 3.6: one consolidated keyword line per
+ * experience entry, replacing the per-bullet keyword sub-line from Phase 3.5.
+ * Renders as a single italic `Tech: kw · kw · …` line beneath the role's
+ * bullets. The AI picks freely from the entire master-resume keyword pool
+ * (experience keywords, capability tags, project keywords, certification/
+ * language tags) — but `ai.ts` filters out anything not present in that
+ * pool, so fabrication is still impossible.
+ */
+export const SuggestedExperienceTagsSchema = z.object({
+  experienceId: z.string(),
+  tags: z.array(z.string()).default([]),
+  rationale: z.string().default(""),
+});
+export type SuggestedExperienceTags = z.infer<
+  typeof SuggestedExperienceTagsSchema
+>;
+
 export const TailorResponseSchema = z.object({
   sessionId: z.string(),
   suggestedSummary: z.string(),
   /**
-   * Phase 3.5: the Skills section is now AI-synthesised (bold title + details)
-   * per JD rather than picked from a fixed master pool. The legacy
-   * `{id,text,rationale}` shape is still accepted on read so old sessions keep
-   * deserialising; the new tailoring pipeline always returns `TailoredSkill`.
+   * Phase 3.5: AI-synthesised Skills (bold title + details). Phase 3.6 keeps
+   * this section unchanged — only the experience pipeline is being simplified.
    */
-  suggestedCapabilities: z.array(
-    z.union([
-      TailoredSkillSchema,
-      z.object({
-        id: z.string(),
-        text: z.string(),
-        rationale: z.string(),
-      }),
-    ]),
-  ),
+  suggestedCapabilities: z.array(TailoredSkillSchema),
   recommendedBlocks: z.array(BlockRecommendationSchema),
   bulletRewrites: z.array(SuggestedEditSchema),
+  /** Phase 3.6: per-role keyword line suggestions. */
+  experienceTags: z.array(SuggestedExperienceTagsSchema).default([]),
 });
 export type TailorResponse = z.infer<typeof TailorResponseSchema>;
 
 /**
  * ApprovedTailoring — what the user finalises before Typst generation.
  * Combines manually-approved AI edits with the manually-checked block IDs.
- */
-/**
- * ApprovedCapability — a single user-approved entry for the Skills section.
  *
- * Phase 3.5 adds the structured `title` + `details` fields. The legacy `text`
- * field is preserved for backwards-compat with older approved JSONs; when
- * present without title/details, the Typst renderer falls back to rendering
- * `text` as-is.
+ * Phase 3.6 clean break: dropped the legacy `text` field on capabilities and
+ * the per-bullet `keywords` field on bullet rewrites. Old sessions in the DB
+ * are wiped by `prisma migrate reset`.
  */
 export const ApprovedCapabilitySchema = z.object({
   id: z.string(),
-  /** Legacy field. Pre-Phase 3.5 sessions had only `{id,text}`. */
-  text: z.string().optional().default(""),
-  title: z.string().optional().default(""),
-  details: z.string().optional().default(""),
+  title: z.string(),
+  details: z.string(),
 });
 export type ApprovedCapability = z.infer<typeof ApprovedCapabilitySchema>;
 
 /**
- * ApprovedBulletRewrite — a user-approved experience bullet plus the
- * keyword sub-line that renders under it. Both the bullet text and the
- * skills list are user-final — AI proposes, user approves.
+ * ApprovedBulletRewrite — a user-approved (or user-included) experience
+ * bullet. Phase 3.6 simplifies the UI to checkbox + AI suggestion only;
+ * `text` is therefore always the AI's suggested phrasing for included
+ * bullets. Unchecked bullets are still serialised (with `included=false`)
+ * so the user's deliberate omissions persist across sessions.
  */
 export const ApprovedBulletRewriteSchema = z.object({
   targetId: z.string(),
   /** Parent experience id; renderer uses it to group bullets per entry. */
   experienceId: z.string().optional(),
   text: z.string(),
-  /** Per-bullet skill keywords rendered under the bullet line. */
-  keywords: z.array(z.string()).default([]),
   /** Whether the user chose to include this bullet in the rendered PDF. */
   included: z.boolean().default(true),
 });
 export type ApprovedBulletRewrite = z.infer<typeof ApprovedBulletRewriteSchema>;
+
+/**
+ * ApprovedExperienceTags — Phase 3.6: the user-finalised keyword line
+ * rendered under each role's bullets. One entry per included experience.
+ * Empty `tags[]` means "don't render the Tech: sub-line for this role".
+ */
+export const ApprovedExperienceTagsSchema = z.object({
+  experienceId: z.string(),
+  tags: z.array(z.string()).default([]),
+});
+export type ApprovedExperienceTags = z.infer<
+  typeof ApprovedExperienceTagsSchema
+>;
 
 export const ApprovedTailoringSchema = z.object({
   selected: SelectedResumeSchema,
   approvedSummary: z.string(),
   approvedCapabilities: z.array(ApprovedCapabilitySchema),
   approvedBulletRewrites: z.array(ApprovedBulletRewriteSchema),
+  approvedExperienceTags: z.array(ApprovedExperienceTagsSchema).default([]),
 });
 export type ApprovedTailoring = z.infer<typeof ApprovedTailoringSchema>;
