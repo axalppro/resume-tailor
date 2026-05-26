@@ -31,6 +31,7 @@ import type {
   MasterResume,
   SuggestedEdit,
   TailorResponse,
+  TemplateId,
 } from "@resume-tailor/shared-types";
 import { SkillsRanked, type SkillSuggestion } from "./skills-ranked";
 import { SummaryReview } from "./summary-review";
@@ -104,6 +105,7 @@ export function TailoringSession({
     ApprovedExperienceTags[]
   >([]);
   const [selectedBlockIds, setSelectedBlockIds] = useState<string[]>([]);
+  const [template, setTemplate] = useState<TemplateId>("neat-cv");
 
   // PDF preview
   const [pdf, setPdf] = useState<{ base64: string; filename: string; pageCount?: number } | null>(
@@ -345,7 +347,7 @@ export function TailoringSession({
       const typstRes = await fetch("/api/generate-typst", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ masterResumeId, approved }),
+        body: JSON.stringify({ masterResumeId, approved, template }),
       });
       const typstJson = await typstRes.json();
       if (!typstJson.ok) throw new Error(typstJson.error ?? "Typst gen failed");
@@ -528,7 +530,7 @@ export function TailoringSession({
       const typstRes = await fetch("/api/generate-typst", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ masterResumeId, approved }),
+        body: JSON.stringify({ masterResumeId, approved, template }),
       });
       const typstJson = await typstRes.json();
       if (!typstJson.ok) throw new Error(typstJson.error ?? "Typst gen failed");
@@ -790,6 +792,24 @@ export function TailoringSession({
 
       {/* ============================================ Footer actions */}
       <div className="sticky bottom-4 z-10 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-md">
+        <div className="flex min-w-[240px] flex-col gap-1">
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Template</span>
+          <select
+            value={template}
+            onChange={(e) => setTemplate(e.target.value as TemplateId)}
+            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+          >
+            <option value="neat-cv">Neat CV</option>
+            <option value="brilliant-cv">Brilliant CV</option>
+          </select>
+        </div>
+        <div className="flex min-w-[240px] flex-col gap-1">
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Template</span>
+          <select value={template} onChange={(e) => setTemplate(e.target.value as TemplateId)} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">
+            <option value="neat-cv">Neat CV</option>
+            <option value="brilliant-cv">Brilliant CV</option>
+          </select>
+        </div>
         <button
           onClick={saveDraft}
           disabled={saving || !sessionId}
