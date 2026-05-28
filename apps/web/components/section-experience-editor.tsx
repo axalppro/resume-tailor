@@ -285,7 +285,7 @@ function EntryCard({
       {entry.bullets && entry.bullets.length > 0 && (
         <ul className="mt-3 space-y-1">
       {entry.bullets
-        .filter((b): b is ExperienceBullet => typeof b !== "string")
+        .map((b, i) => (typeof b === "string" ? { id: `b-${i}`, text: b } : b))
         .map((b: ExperienceBullet, i: number) => (
           <li key={b.id || `b-${i}`} className="flex items-start gap-2 text-xs text-slate-600">
             <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-slate-300" />
