@@ -15,6 +15,7 @@ const BodySchema = z.object({
   approved: ApprovedTailoringSchema,
   filename: z.string().optional(),
   template: TemplateIdSchema.default("neat-cv"),
+  showProfilePhoto: z.boolean().optional().default(false),
 });
 
 export async function POST(req: NextRequest) {
@@ -40,6 +41,7 @@ export async function POST(req: NextRequest) {
       approvedBulletRewrites: parsed.data.approved.approvedBulletRewrites,
       approvedExperienceTags: parsed.data.approved.approvedExperienceTags,
     },
+    showProfilePhoto: parsed.data.showProfilePhoto,
   };
 
   return NextResponse.json({

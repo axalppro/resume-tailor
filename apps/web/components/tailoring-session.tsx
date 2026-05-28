@@ -106,6 +106,7 @@ export function TailoringSession({
   >([]);
   const [selectedBlockIds, setSelectedBlockIds] = useState<string[]>([]);
   const [template, setTemplate] = useState<TemplateId>("neat-cv");
+  const [showProfilePhoto, setShowProfilePhoto] = useState(false);
 
   // PDF preview
   const [pdf, setPdf] = useState<{ base64: string; filename: string; pageCount?: number } | null>(
@@ -347,7 +348,7 @@ export function TailoringSession({
       const typstRes = await fetch("/api/generate-typst", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ masterResumeId, approved, template }),
+        body: JSON.stringify({ masterResumeId, approved, template, showProfilePhoto }),
       });
       const typstJson = await typstRes.json();
       if (!typstJson.ok) throw new Error(typstJson.error ?? "Typst gen failed");
@@ -530,7 +531,7 @@ export function TailoringSession({
       const typstRes = await fetch("/api/generate-typst", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ masterResumeId, approved, template }),
+        body: JSON.stringify({ masterResumeId, approved, template, showProfilePhoto }),
       });
       const typstJson = await typstRes.json();
       if (!typstJson.ok) throw new Error(typstJson.error ?? "Typst gen failed");
@@ -804,6 +805,19 @@ export function TailoringSession({
               <option value="brilliant-cv">Brilliant CV</option>
             </select>
           </div>
+          {template === "brilliant-cv" && (
+            <label className="flex cursor-pointer items-center gap-2 pb-2 text-sm text-slate-700">
+              <div
+                onClick={() => setShowProfilePhoto((v) => !v)}
+                className={`relative h-5 w-9 rounded-full transition-colors ${showProfilePhoto ? "bg-brand" : "bg-slate-300"}`}
+              >
+                <span
+                  className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${showProfilePhoto ? "translate-x-4" : "translate-x-0.5"}`}
+                />
+              </div>
+              Profile picture
+            </label>
+          )}
           <button
             onClick={saveDraft}
             disabled={saving || !sessionId}

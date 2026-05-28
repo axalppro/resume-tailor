@@ -13,7 +13,7 @@
  */
 
 import { spawn } from "node:child_process";
-import { mkdtemp, rm, writeFile, readFile, cp } from "node:fs/promises";
+import { mkdtemp, rm, writeFile, readFile, cp, copyFile, access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -38,6 +38,10 @@ export async function compileTypst({ source, data }: CompileArgs): Promise<Compi
     // Copy bundled partials + fonts so `#import "./partials/..."` resolves.
     await cp(join(TEMPLATES_DIR, "partials"), join(work, "partials"), { recursive: true });
     await cp(FONTS_DIR, join(work, "fonts"), { recursive: true });
+
+    // Copy optional assets (profile photo) so templates can reference them as "./me.jpg".
+    const profilePhoto = join(TEMPLATES_DIR, "me.jpg");
+    await access(profilePhoto).then(() => copyFile(profilePhoto, join(work, "me.jpg"))).catch(() => {});
 
     const sourcePath = join(work, "resume.typ");
     const outPath = join(work, "resume.pdf");

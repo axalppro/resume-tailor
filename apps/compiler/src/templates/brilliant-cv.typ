@@ -11,6 +11,7 @@
 #let master = payload.master
 #let selected = payload.selected
 #let basics = master.basics
+#let show-photo = payload.at("showProfilePhoto", default: false)
 
 #let metadata = (
   header_quote: selected.headline,
@@ -20,7 +21,7 @@
     awesome_color: "skyblue",
     before_section_skip: "1pt",
     before_entry_skip: "1pt",
-    before_entry_description_skip: "1pt",
+    before_entry_description_skip: "-4pt",
     paper_size: "a4",
     date_width: "3.6cm",
     fonts: (
@@ -29,12 +30,12 @@
     ),
     header: (
       header_align: "left",
-      display_profile_photo: false,
+      display_profile_photo: show-photo,
       profile_photo_radius: "50%",
       info_font_size: "10pt",
     ),
     entry: (
-      display_entry_society_first: true,
+      display_entry_society_first: false,
       display_logo: false,
     ),
     section: (
@@ -62,7 +63,7 @@
   ),
 )
 
-#show: cv.with(metadata)
+#show: cv.with(metadata, profile-photo: if show-photo { image("./me.jpg") } else { none })
 
 #let approved-bullet-rewrites = selected.at("approvedBulletRewrites", default: ())
 #let approved-capabilities = selected.at("approvedCapabilities", default: ())
