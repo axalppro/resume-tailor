@@ -112,12 +112,23 @@
 #if educations.len() > 0 [
   #cv-section("Education")
   #for edu in educations {
+    let description-parts = ()
+    if edu.at("thesis", default: "") != "" [
+      description-parts.push([*Thesis:* #edu.thesis])
+    ]
+    if edu.at("courses", default: ()).len() > 0 [
+      description-parts.push([*Courses:* #edu.courses.join(", ")])
+    ]
     cv-entry(
       title: [#edu.title],
       society: [#edu.institution],
       date: [#year-range(edu)],
       location: [#edu.location],
-      description: [],
+      description: if description-parts.len() > 0 {
+        list(..description-parts)
+      } else {
+        []
+      },
     )
   }
 ]

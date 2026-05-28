@@ -110,6 +110,8 @@ export const EducationSchema = z.object({
   location: z.string().optional().default(""),
   start_year: YearOrPresent,
   end_year: YearOrPresent.optional(),
+  thesis: z.string().optional().default(""),
+  courses: z.array(z.string()).optional().default([]),
   keywords: z.array(z.string()).default([]),
   tags: z.array(z.string()).default([]),
 });

@@ -2,7 +2,7 @@
 // selected resume, then renders only what was picked.
 
 #import "@preview/neat-cv:1.0.0": item-with-level, entry
-#import "./helpers.typ": get-by-id, compact-entry, year-range, keyword-line
+#import "./helpers.typ": get-by-id, compact-entry, education-entry, year-range, keyword-line
 
 #let render-section(title, items, ids, org-key: "org") = {
   if ids.len() > 0 [
@@ -11,6 +11,18 @@
       let item = get-by-id(items, id)
       if item != none {
         compact-entry(item, org-key: org-key)
+      }
+    }
+  ]
+}
+
+#let render-education(title, items, ids) = {
+  if ids.len() > 0 [
+    = #title
+    #for id in ids {
+      let item = get-by-id(items, id)
+      if item != none {
+        education-entry(item)
       }
     }
   ]

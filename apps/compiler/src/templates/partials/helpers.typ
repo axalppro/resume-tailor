@@ -48,3 +48,29 @@
     #body
   ]
 }
+
+#let education-entry(item) = {
+  let loc = if "location" in item and item.location != "" { item.location } else { "" }
+  let description-parts = ()
+  
+  if item.at("thesis", default: "") != "" [
+    description-parts.push([*Thesis:* #item.thesis])
+  ]
+  if item.at("courses", default: ()).len() > 0 [
+    description-parts.push([*Courses:* #item.courses.join(", ")])
+  ]
+  if "keywords" in item and item.keywords.len() > 0 [
+    description-parts.push([#keyword-line(item.keywords)])
+  ]
+
+  entry(
+    title: item.title,
+    date: year-range(item),
+    institution: item.institution,
+    location: loc,
+  )[
+    #for part in description-parts [
+      #part \
+    ]
+  ]
+}

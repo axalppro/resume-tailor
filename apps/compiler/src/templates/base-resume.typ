@@ -10,7 +10,7 @@
 #import "@preview/neat-cv:1.0.0": cv, entry, item-with-level, cv-with-side, contact-info
 
 #import "./partials/helpers.typ": get-by-id, year-range, keyword-line, compact-entry
-#import "./partials/sections.typ": render-skills, render-experience-with-bullets, render-section, render-capabilities, render-languages, render-additional-experience
+#import "./partials/sections.typ": render-skills, render-experience-with-bullets, render-section, render-education, render-capabilities, render-languages, render-additional-experience
 
 #let payload = json("./resume-data.json")
 #let master   = payload.master
@@ -72,7 +72,7 @@
 
 #render-experience-with-bullets(master, selected, "Professional Experience")
 
-#render-section("Education", master.education, selected.education, org-key: "institution")
+#render-education("Education", master.education, selected.education)
 
 #render-section("Projects", master.projects, selected.projects, org-key: "subtitle")
 

@@ -33,6 +33,8 @@ function EntryForm({
   const [location, setLocation] = useState(initial?.location ?? "");
   const [startYear, setStartYear] = useState(initial?.start_year?.toString() ?? "");
   const [endYear, setEndYear] = useState(initial?.end_year?.toString() ?? "");
+  const [thesis, setThesis] = useState(initial?.thesis ?? "");
+  const [courses, setCourses] = useState(initial?.courses?.join(", ") ?? "");
   const [tags, setTags] = useState(initial?.tags?.join(", ") ?? "");
 
   const handleSave = () => {
@@ -45,6 +47,8 @@ function EntryForm({
       location: location.trim(),
       start_year: startYear,
       end_year: yearOrPresent(endYear),
+      thesis: thesis.trim(),
+      courses: courses.split(",").map<string>((c: string) => c.trim()).filter((c: string) => c.length > 0),
       keywords: initial?.keywords ?? [],
       tags: tags.split(",").map<string>((t: string) => t.trim()).filter((t: string) => t.length > 0),
     });
@@ -102,6 +106,24 @@ function EntryForm({
         </div>
       </div>
       <label className="mt-3 block text-xs">
+        <span className="mb-1 block font-medium text-slate-700">Thesis (optional)</span>
+        <input
+          value={thesis}
+          onChange={(e) => setThesis(e.target.value)}
+          placeholder="Live track limits crossing detection system for vehicle race using computer vision"
+          className="w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-800 shadow-inner focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+        />
+      </label>
+      <label className="mt-3 block text-xs">
+        <span className="mb-1 block font-medium text-slate-700">Courses (comma-separated, optional)</span>
+        <input
+          value={courses}
+          onChange={(e) => setCourses(e.target.value)}
+          placeholder="Embedded Systems, Software Design, Mechanics"
+          className="w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-800 shadow-inner focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+        />
+      </label>
+      <label className="mt-3 block text-xs">
         <span className="mb-1 block font-medium text-slate-700">Tags (comma-separated)</span>
         <input
           value={tags}
@@ -154,6 +176,12 @@ function EntryCard({
               {entry.start_year} — {entry.end_year ?? "Present"}
             </p>
           )}
+          {entry.thesis && (
+            <p className="mt-2 text-xs text-slate-700"><strong>Thesis:</strong> {entry.thesis}</p>
+          )}
+          {entry.courses && entry.courses.length > 0 && (
+            <p className="mt-1 text-xs text-slate-600"><strong>Courses:</strong> {entry.courses.join(", ")}</p>
+          )}
           {entry.tags.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1">
               {entry.tags.map((tag: string) => (
@@ -178,6 +206,8 @@ function EntryCard({
                 location: entry.location ?? "",
                 start_year: entry.start_year,
                 end_year: entry.end_year,
+                thesis: entry.thesis,
+                courses: entry.courses,
                 keywords: entry.keywords,
                 tags: entry.tags,
               })
