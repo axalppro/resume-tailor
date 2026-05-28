@@ -68,6 +68,8 @@
       "location": "Sion, Switzerland",
       "start_year": 2020,
       "end_year": 2023,
+      "thesis": "Live track limits crossing detection system for vehicle race using computer vision, AI/ML experimentation",
+      "courses": ["Embedded Systems","Software Design","Object-Oriented Programming","Industrial IoT","Data Analysis","Electronics","Mechanics","FPGA Design","Mechatronics"],
       "keywords": ["Software design","Object-oriented programming","Embedded systems","Mechanics","FPGA design","Mechatronics","STM32","Nordic nRF","BLE","CAN","SPI","I2C","Keil","CubeMX","FreeRTOS"],
       "tags": ["engineering","embedded","software","bachelor"]
     },
@@ -78,11 +80,44 @@
       "location": "Sion, Switzerland",
       "start_year": 2015,
       "end_year": 2019,
+      "thesis": "Autonomous robot for Eurobot competition, including mechanical and electronic design and microcontroller programming in C",
+      "courses": ["Electronics","Microcontroller programming","C programming","PCB design","Prototyping","Troubleshooting"],
       "keywords": ["Electronics","PCB design","Microchip PIC","C programming","Autonomous robot","Eurobot"],
       "tags": ["electronics","pcb","robotics","vocational"]
     }
   ],
   "projects": [
+    {
+      "id": "resume-tailor",
+      "title": "Resume Tailor",
+      "subtitle": "AI-powered resume customization tool",
+      "location": "Monthey",
+      "start_year": 2026,
+      "end_year": "ongoing",
+      "bullets": [
+        "Developed a web application that uses AI to analyze job descriptions and tailor resumes for better alignment.",
+        "Implemented backend services in Go and frontend interfaces in React and TypeScript.",
+        "Integrated multiple AI providers (OpenAI, Anthropic, Perplexity) for resume analysis and customization.",
+        "Built a Typst-based PDF generation system for high-quality resume output."
+      ],
+      "keywords": ["AI prompt engineering","Resume parsing","Web development","Go","React","TypeScript","OpenAI API","Anthropic API","Perplexity API"],
+      "tags": ["software","web","ai-ml","side-project"]
+    },
+    {
+      "id": "interactive-resume",
+      "title": "Interactive Resume",
+      "subtitle": "One-page web portfolio showcasing personality with multimedia content",
+      "location": "Monthey",
+      "start_year": 2026,
+      "end_year": "ongoing",
+      "bullets": [
+        "Built a one-page web resume using TypeScript and React to showcase personality, projects, pictures, and 3D renders—capabilities beyond traditional resumes.",
+        "Designed an engaging visual layout that highlights projects with multimedia content including photography and 3D renders.",
+        "Created an interactive, responsive portfolio experience that differentiates from standard resume formats."
+      ],
+      "keywords": ["TypeScript","React","Portfolio design","Web development","Multimedia content","3D visualization","Personal branding","Interactive UI"],
+      "tags": ["software","web","side-project"]
+    },
     {
       "id": "nocctua-technical-lead",
       "title": "Technical Lead – Nocctua (BSc Business eXperience)",

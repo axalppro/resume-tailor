@@ -113,7 +113,7 @@ Use `Explore` sub-agent (not semantic_search) for:
 - Implement greenfield features end-to-end (schema → API → UI → tests)
 - Ask permission before each task
 - Use sub-agents for exploration to preserve context
-- Validate work (tests, typecheck, lint)
+- Validate work (tests, typecheck, lint) but instead of running commands that produce long output, ask user to run them and report results
 
 ### ❌ Don't
 - Fix bugs or refactor existing code (out of scope)

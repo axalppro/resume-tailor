@@ -23,17 +23,20 @@ export const HeadlineVariantSchema = z.object({
   id: z.string(),
   text: z.string(),
 });
+export type HeadlineVariant = z.infer<typeof HeadlineVariantSchema>;
 
 export const ProfileVariantSchema = z.object({
   id: z.string(),
   text: z.string(),
 });
+export type ProfileVariant = z.infer<typeof ProfileVariantSchema>;
 
 export const CapabilitySchema = z.object({
   id: z.string(),
   text: z.string(),
   tags: z.array(z.string()).default([]),
 });
+export type Capability = z.infer<typeof CapabilitySchema>;
 
 const YearOrPresent = z.union([z.number().int(), z.literal("Present"), z.string()]);
 
@@ -110,6 +113,7 @@ export const EducationSchema = z.object({
   keywords: z.array(z.string()).default([]),
   tags: z.array(z.string()).default([]),
 });
+export type Education = z.infer<typeof EducationSchema>;
 
 export const ProjectSchema = z.object({
   id: z.string(),
@@ -121,6 +125,7 @@ export const ProjectSchema = z.object({
   keywords: z.array(z.string()).default([]),
   tags: z.array(z.string()).default([]),
 });
+export type Project = z.infer<typeof ProjectSchema>;
 
 export const LanguageSchema = z.object({
   id: z.string(),
@@ -128,6 +133,7 @@ export const LanguageSchema = z.object({
   level: z.string(),
   tags: z.array(z.string()).default([]),
 });
+export type Language = z.infer<typeof LanguageSchema>;
 
 export const CertificationSchema = z.object({
   id: z.string(),
@@ -136,8 +142,10 @@ export const CertificationSchema = z.object({
   year: YearOrPresent.optional(),
   tags: z.array(z.string()).default([]),
 });
+export type Certification = z.infer<typeof CertificationSchema>;
 
 export const AdditionalExperienceSchema = ExperienceSchema;
+export type AdditionalExperienceSchema = z.infer<typeof AdditionalExperienceSchema>;
 
 export const MasterResumeSchema = z.object({
   basics: BasicsSchema,
