@@ -238,15 +238,6 @@ function EntryCard({
               {entry.start_year} — {entry.end_year ?? "Present"}
             </p>
           )}
-          {entry.bullets && entry.bullets.length > 0 && (
-            <div className="mt-2">
-              {entry.bullets.map((bullet) => (
-                <p key={typeof bullet === "string" ? bullet : bullet.id} className="mt-1 text-xs text-slate-600">
-                  - {typeof bullet === "string" ? bullet : bullet.text}
-                </p>
-              ))}
-            </div>
-          )}
           {entry.tags.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1">
               {entry.tags.map((tag) => (
